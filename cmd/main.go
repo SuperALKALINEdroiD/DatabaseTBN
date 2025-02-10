@@ -11,15 +11,17 @@ import (
 	"time"
 
 	"github.com/SuperALKALINEdroiD/timelyDB/config"
+	"github.com/SuperALKALINEdroiD/timelyDB/utils/hashing"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/nodes"
 
 	"github.com/go-chi/chi/v5"
 )
 
 type App struct {
-	Config *config.DatabaseConfig
-	Router *chi.Mux
-	Nodes  []*nodes.Node
+	Config       *config.DatabaseConfig
+	Router       *chi.Mux
+	Nodes        []*nodes.Node
+	NodeHashInfo hashing.NodeHash
 }
 
 func main() {
@@ -40,12 +42,13 @@ func main() {
 		panic("error while loading config")
 	}
 
-	grpcNodes := nodes.LoadNodes(ctx, config)
+	grpcNodes, nodeHashInfo := nodes.LoadNodes(ctx, config)
 
 	app := &App{
-		Config: config,
-		Router: initRouter(config),
-		Nodes:  grpcNodes,
+		Config:       config,
+		Router:       initRouter(config),
+		Nodes:        grpcNodes,
+		NodeHashInfo: nodeHashInfo,
 	}
 
 	serverAddress := fmt.Sprintf(":%d", app.Config.Port)

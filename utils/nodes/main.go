@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strconv"
 
 	"github.com/SuperALKALINEdroiD/timelyDB/config"
+	"github.com/SuperALKALINEdroiD/timelyDB/utils/hashing"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/storage"
 	"google.golang.org/grpc"
 )
@@ -21,7 +23,7 @@ type Node struct {
 	Storage storage.KVStore
 }
 
-func nodeSetupTask(ctx context.Context, nodeID string, port string) (*Node, error) {
+func nodeSetupTask(ctx context.Context, nodeID string, port string, config *config.DatabaseConfig) (*Node, error) {
 	listener, httpError := net.Listen("tcp", port)
 	if httpError != nil {
 		return nil, fmt.Errorf("failed to start listener: %v", httpError)
@@ -30,6 +32,7 @@ func nodeSetupTask(ctx context.Context, nodeID string, port string) (*Node, erro
 	grpcServer := grpc.NewServer()
 	dataStoreServer := &internalServer{}
 	RegisterNodeServiceServer(grpcServer, dataStoreServer)
+	nodeStorage := storage.LocalKVStore{} // TODO: based on config
 
 	stop := make(chan struct{})
 
@@ -49,30 +52,34 @@ func nodeSetupTask(ctx context.Context, nodeID string, port string) (*Node, erro
 		close(stop)
 	}()
 
-	return &Node{ID: nodeID, Address: port, Storage: nil}, nil
+	return &Node{ID: nodeID, Address: port, Storage: &nodeStorage}, nil
 }
 
-func LoadNodes(ctx context.Context, config *config.DatabaseConfig) []*Node {
+func LoadNodes(ctx context.Context, config *config.DatabaseConfig) ([]*Node, hashing.NodeHash) {
 	if len(config.Nodes) == 0 || config.NodeCount == 0 {
 		log.Println("No node configuration found.")
-		return []*Node{}
+		return []*Node{}, nil
 	}
 
 	log.Println("Loading nodes...")
 
 	grpcNodes := make([]*Node, len(config.Nodes))
+	clusterHashing := hashing.NewConsistentHashing(len(config.Nodes)) // todo add config in future
 
 	for i, node := range config.Nodes {
 		log.Printf("Node %d: Endpoint ==> %s\n", i+1, node.Endpoint)
 
 		var setupError error
-		grpcNodes[i], setupError = nodeSetupTask(ctx, fmt.Sprintf("%d", i), node.Endpoint)
+		grpcNodes[i], setupError = nodeSetupTask(ctx, fmt.Sprintf("%d", i), node.Endpoint, config)
+
 		if setupError != nil {
 			log.Printf("Error setting up Node %d: %v\n", i+1, setupError)
 			continue
 		}
+
+		clusterHashing.AddNode(strconv.Itoa(i))
 	}
 
 	log.Println("Nodes are up and running.")
-	return grpcNodes
+	return grpcNodes, clusterHashing
 }

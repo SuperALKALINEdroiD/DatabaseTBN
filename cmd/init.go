@@ -39,6 +39,7 @@ func addMiddlewares(router *chi.Mux) {
 }
 
 func initRoutes(router *chi.Mux, cfg *config.DatabaseConfig) {
+	// init routes based on config ??
 	router.Route("/data-in", func(r chi.Router) {
 		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)

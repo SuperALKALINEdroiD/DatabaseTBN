@@ -113,8 +113,28 @@ func (localWAL *LocalWAL) ReadLog(startLine, endLine int) ([]string, error) {
 type LocalKVStore struct {
 }
 
-func (localKVStore LocalKVStore) Connect() {
+func (localKVStore LocalKVStore) Connect(config map[string]interface{}) error {
 
+}
+
+func (localKVStore LocalKVStore) Close() error {
+
+}
+
+func (localKVStore *LocalKVStore) GetSize() (int, error) {
+	return 0, nil
+}
+
+func (localKVStore LocalKVStore) Put(key string, value []byte) error {
+	return nil
+}
+
+func (localKVStore LocalKVStore) Get(key string) (value []byte, error error) {
+	return nil, nil
+}
+
+func (localKVStore LocalKVStore) Delete(key string) error {
+	return nil
 }
 
 type LocalLogStore struct {
