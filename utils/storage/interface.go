@@ -1,9 +1,8 @@
 package storage
 
 type Storage interface {
-	Connect(config map[string]interface{}) error // connect to storage
-	Close() error                                // disconnect
-	GetSize() (int, error)                       // get in memory size
+	Connect(path string) error // connect to storage
+	GetSize() (int, error)     // get in memory size
 }
 
 type WAL interface {

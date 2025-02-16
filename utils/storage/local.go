@@ -6,69 +6,63 @@ import (
 	"log"
 	"os"
 	"sync"
-
-	internalerrors "github.com/SuperALKALINEdroiD/timelyDB/utils/internalErrors"
 )
 
 type LocalWAL struct {
-	file    *os.File
-	mutex   sync.Mutex
-	maxSize int
+	path  string
+	mutex sync.Mutex
 }
 
 func openLocalStorageFile(path string) (*os.File, error) {
 	return os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
 }
 
-func (localWAL *LocalWAL) Connect(config map[string]interface{}) error {
-	path, ok := config["path"].(string) // type assertion to string
-	if !ok {
-		return internalerrors.InvalidPath
-	}
-
-	maxSize, ok := config["maxSize"].(int) // TODO: see if i can do something with this
-	if !ok {
-		return errors.New("invalid max size for WAL")
-	}
-
-	file, err := openLocalStorageFile(path)
-
-	if err != nil {
-		log.Println("Error opening file:", err)
-		return err
-	}
-
-	localWAL.file = file
-	localWAL.maxSize = maxSize
-
+func (localWAL *LocalWAL) Connect(path string) error {
+	localWAL.path = path
 	return nil
 }
 
-func (localWAL *LocalWAL) Close() error {
-	return localWAL.file.Close()
-}
-
-func (localWAL *LocalWAL) GetSize() (int, error) {
-	fileInfo, err := localWAL.file.Stat()
-	if err != nil {
-		return 0, err
-	}
-	return int(fileInfo.Size()), nil
+func (localWAL *LocalWAL) GetPath(path string) string {
+	return localWAL.path
 }
 
 func (localWAL *LocalWAL) WriteLog(data []byte) error {
 	localWAL.mutex.Lock()
 	defer localWAL.mutex.Unlock()
 
-	_, err := localWAL.file.Write(data)
+	file, err := openLocalStorageFile(localWAL.path)
+	if err != nil {
+		log.Println("Error opening WAL file:", err)
+		return err
+	}
+	defer file.Close()
+
+	_, err = file.Write(append(data, '\n'))
 	if err != nil {
 		log.Println("Error writing log:", err)
 		return err
 	}
 
-	localWAL.file.Sync() // TODO: find a better time to sync changes to stable storage
+	if err := file.Sync(); err != nil {
+		log.Println("Error syncing file:", err)
+		return err
+	}
 
 	return nil
+}
+
+func (localWAL *LocalWAL) GetSize() (int, error) {
+	file, err := os.Open(localWAL.path)
+	if err != nil {
+		return 0, err
+	}
+	defer file.Close()
+
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return 0, err
+	}
+	return int(fileInfo.Size()), nil
 }
 
 func (localWAL *LocalWAL) ReadLog(startLine, endLine int) ([]string, error) {
@@ -79,7 +73,7 @@ func (localWAL *LocalWAL) ReadLog(startLine, endLine int) ([]string, error) {
 		return nil, errors.New("invalid line range")
 	}
 
-	file, err := os.Open(localWAL.file.Name())
+	file, err := os.Open(localWAL.path)
 	if err != nil {
 		return nil, err
 	}
@@ -111,13 +105,14 @@ func (localWAL *LocalWAL) ReadLog(startLine, endLine int) ([]string, error) {
 }
 
 type LocalKVStore struct {
+	mutex sync.RWMutex
 }
 
-func (localKVStore LocalKVStore) Connect(config map[string]interface{}) error {
+func (localKVStore *LocalKVStore) Connect(path string) error {
 	return nil
 }
 
-func (localKVStore LocalKVStore) Close() error {
+func (localKVStore *LocalKVStore) Close() error {
 	return nil
 }
 
@@ -125,15 +120,15 @@ func (localKVStore *LocalKVStore) GetSize() (int, error) {
 	return 0, nil
 }
 
-func (localKVStore LocalKVStore) Put(key string, value []byte) error {
+func (localKVStore *LocalKVStore) Put(key string, value []byte) error {
 	return nil
 }
 
-func (localKVStore LocalKVStore) Get(key string) (value []byte, error error) {
+func (localKVStore *LocalKVStore) Get(key string) (value []byte, error error) {
 	return nil, nil
 }
 
-func (localKVStore LocalKVStore) Delete(key string) error {
+func (localKVStore *LocalKVStore) Delete(key string) error {
 	return nil
 }
 

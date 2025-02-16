@@ -8,6 +8,7 @@ import (
 
 	"github.com/SuperALKALINEdroiD/timelyDB/config"
 	"github.com/SuperALKALINEdroiD/timelyDB/handlers"
+	"github.com/SuperALKALINEdroiD/timelyDB/utils/storage"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
 )
@@ -25,7 +26,7 @@ func initEnvironment() (*config.DatabaseConfig, error) {
 	return cfg, nil
 }
 
-func initRouter(cfg *config.DatabaseConfig) *chi.Mux {
+func initRouter(cfg storage.WAL) *chi.Mux {
 	router := chi.NewRouter()
 	addMiddlewares(router)
 	initRoutes(router, cfg)
@@ -38,7 +39,7 @@ func addMiddlewares(router *chi.Mux) {
 	router.Use(middleware.Logger)
 }
 
-func initRoutes(router *chi.Mux, cfg *config.DatabaseConfig) {
+func initRoutes(router *chi.Mux, cfg storage.WAL) {
 	// init routes based on config ??
 	router.Route("/data-in", func(r chi.Router) {
 		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -51,7 +52,7 @@ func initRoutes(router *chi.Mux, cfg *config.DatabaseConfig) {
 			fmt.Fprintf(w, "Upsert Endpoint WIP - Config: %+v", cfg)
 		})
 
-		r.Post("/insert", handlers.InsertHandler)
+		r.Post("/insert", handlers.InsertHandler(cfg))
 
 		r.Post("/update", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)

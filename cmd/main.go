@@ -13,6 +13,7 @@ import (
 	"github.com/SuperALKALINEdroiD/timelyDB/config"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/hashing"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/nodes"
+	"github.com/SuperALKALINEdroiD/timelyDB/utils/storage"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -22,6 +23,7 @@ type App struct {
 	Router       *chi.Mux
 	Nodes        []*nodes.Node
 	NodeHashInfo hashing.NodeHash
+	WAL          storage.WAL
 }
 
 func main() {
@@ -43,12 +45,15 @@ func main() {
 	}
 
 	grpcNodes, nodeHashInfo := nodes.LoadNodes(ctx, config)
+	wal := &storage.LocalWAL{}
+	wal.Connect("test-path")
 
 	app := &App{
 		Config:       config,
-		Router:       initRouter(config),
+		Router:       initRouter(wal),
 		Nodes:        grpcNodes,
 		NodeHashInfo: nodeHashInfo,
+		WAL:          wal,
 	}
 
 	serverAddress := fmt.Sprintf(":%d", app.Config.Port)
