@@ -9,9 +9,12 @@
 	 "nodes": [
 	 	 {
 	 	 	 "endpoint": ":50051"
+	 	 },
+	 	 {
+	 	 	 "endpoint": ":50052"
 	 	 }
 	 ],
-	 "nodeCount": 1,
+	 "nodeCount": 2,
 	 "mode": "KV",
 	 "inMemoryStorageThreshold": 2000,
 	 "metaDataConfig": {

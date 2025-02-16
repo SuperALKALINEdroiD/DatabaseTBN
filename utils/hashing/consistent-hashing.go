@@ -9,17 +9,17 @@ import (
 )
 
 type ConsistentHashing struct {
-	nodes    []int
-	nodeMap  map[int]string
-	replicas int
-	mutex    sync.RWMutex
+	nodes            []int
+	nodeMap          map[int]string
+	virtualNodeCount int // how many time each node appears on hasing; from GS video for load balancing on distribited system
+	mutex            sync.RWMutex
 }
 
-func NewConsistentHashing(replicas int) *ConsistentHashing {
+func NewConsistentHashing(virtualNodeCount int) *ConsistentHashing {
 	return &ConsistentHashing{
-		nodes:    []int{},
-		nodeMap:  make(map[int]string),
-		replicas: replicas,
+		nodes:            []int{},
+		nodeMap:          make(map[int]string),
+		virtualNodeCount: virtualNodeCount,
 	}
 }
 
@@ -31,7 +31,7 @@ func (c *ConsistentHashing) AddNode(nodeID string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	for i := 0; i < c.replicas; i++ {
+	for i := 0; i < c.virtualNodeCount; i++ {
 		hash := c.hashKey(fmt.Sprintf("%s-%d", nodeID, i))
 		c.nodes = append(c.nodes, hash)
 		c.nodeMap[hash] = nodeID
@@ -44,12 +44,11 @@ func (c *ConsistentHashing) RemoveNode(nodeID string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	for i := 0; i < c.replicas; i++ {
+	for i := 0; i < c.virtualNodeCount; i++ {
 		hash := c.hashKey(fmt.Sprintf("%s-%d", nodeID, i))
 		delete(c.nodeMap, hash)
 	}
 
-	// Rebuild sorted hash list
 	c.nodes = c.nodes[:0]
 	for key := range c.nodeMap {
 		c.nodes = append(c.nodes, key)

@@ -114,11 +114,11 @@ type LocalKVStore struct {
 }
 
 func (localKVStore LocalKVStore) Connect(config map[string]interface{}) error {
-
+	return nil
 }
 
 func (localKVStore LocalKVStore) Close() error {
-
+	return nil
 }
 
 func (localKVStore *LocalKVStore) GetSize() (int, error) {

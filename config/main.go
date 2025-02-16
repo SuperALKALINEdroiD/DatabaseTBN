@@ -75,7 +75,7 @@ func GenerateConfig(filePath string) (*DatabaseConfig, error) {
 	}
 	defer file.Close()
 
-	exampleConfig := GenerateExampleConfig(1, "") // if no config, start with 1 node on local machine
+	exampleConfig := GenerateExampleConfig(2, "") // if no config, start with 1 node on local machine
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "	 ")

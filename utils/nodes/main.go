@@ -64,13 +64,13 @@ func LoadNodes(ctx context.Context, config *config.DatabaseConfig) ([]*Node, has
 	log.Println("Loading nodes...")
 
 	grpcNodes := make([]*Node, len(config.Nodes))
-	clusterHashing := hashing.NewConsistentHashing(len(config.Nodes)) // todo add config in future
+	clusterHashing := hashing.NewConsistentHashing(len(config.Nodes)) // todo add config for virtual node count
 
 	for i, node := range config.Nodes {
 		log.Printf("Node %d: Endpoint ==> %s\n", i+1, node.Endpoint)
 
 		var setupError error
-		grpcNodes[i], setupError = nodeSetupTask(ctx, fmt.Sprintf("%d", i), node.Endpoint, config)
+		grpcNodes[i], setupError = nodeSetupTask(ctx, strconv.Itoa(i), node.Endpoint, config)
 
 		if setupError != nil {
 			log.Printf("Error setting up Node %d: %v\n", i+1, setupError)
