@@ -2,6 +2,7 @@ package logs
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/storage"
@@ -18,20 +19,18 @@ const (
 
 type WriteAheadEntry struct {
 	EntryID   string
-	NodeID    int       // node where data will be saved
+	NodeID    string    // node where data will be saved
 	Timestamp time.Time // entry time
 	Data      []byte    // The actual data being written
 	Status    EntryStatus
 }
 
-func AddWalEntry(wal storage.WAL) {
-	// TODO accept data to be logged as parameter
-
+func AddWalEntry(wal storage.WAL, key string, value string, nodeId string) {
 	writeAheadEntry := WriteAheadEntry{
 		EntryID:   uuid.New().String(),
-		NodeID:    0, // TODO: Retrieve actual node ID
+		NodeID:    nodeId,
 		Timestamp: time.Now(),
-		Data:      []byte("log data"), // Replace with actual data
+		Data:      []byte(fmt.Sprintf("%s:::%s", key, value)),
 		Status:    Committed,
 	}
 
@@ -40,7 +39,7 @@ func AddWalEntry(wal storage.WAL) {
 		panic("Failed to serialize the log entry")
 	}
 
-	logData = append(logData, '\n') // Ensure entries are newline-separated
+	logData = append(logData, '\n')
 
 	if err := wal.WriteLog(logData); err != nil {
 		panic("Failed to write to write-ahead logs")

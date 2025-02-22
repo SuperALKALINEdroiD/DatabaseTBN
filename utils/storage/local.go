@@ -22,7 +22,7 @@ func (localWAL *LocalWAL) Connect(path string) error {
 	return nil
 }
 
-func (localWAL *LocalWAL) GetPath(path string) string {
+func (localWAL *LocalWAL) GetPath() string {
 	return localWAL.path
 }
 

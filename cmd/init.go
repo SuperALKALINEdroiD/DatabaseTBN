@@ -7,8 +7,8 @@ import (
 	"os"
 
 	"github.com/SuperALKALINEdroiD/timelyDB/config"
+	"github.com/SuperALKALINEdroiD/timelyDB/core"
 	"github.com/SuperALKALINEdroiD/timelyDB/handlers"
-	"github.com/SuperALKALINEdroiD/timelyDB/utils/storage"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
 )
@@ -26,10 +26,10 @@ func initEnvironment() (*config.DatabaseConfig, error) {
 	return cfg, nil
 }
 
-func initRouter(cfg storage.WAL) *chi.Mux {
+func initRouter(app *core.App) *chi.Mux {
 	router := chi.NewRouter()
 	addMiddlewares(router)
-	initRoutes(router, cfg)
+	initRoutes(router, app)
 	return router
 }
 
@@ -39,7 +39,7 @@ func addMiddlewares(router *chi.Mux) {
 	router.Use(middleware.Logger)
 }
 
-func initRoutes(router *chi.Mux, cfg storage.WAL) {
+func initRoutes(router *chi.Mux, app *core.App) {
 	// init routes based on config ??
 	router.Route("/data-in", func(r chi.Router) {
 		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -49,14 +49,14 @@ func initRoutes(router *chi.Mux, cfg storage.WAL) {
 
 		r.Post("/upsert", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			fmt.Fprintf(w, "Upsert Endpoint WIP - Config: %+v", cfg)
+			fmt.Fprintf(w, "Upsert Endpoint WIP - Config: %+v", app)
 		})
 
-		r.Post("/insert", handlers.InsertHandler(cfg))
+		r.Post("/insert", handlers.InsertHandler(app))
 
 		r.Post("/update", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			fmt.Fprintf(w, "Update Endpoint WIP - Config: %+v", cfg)
+			fmt.Fprintf(w, "Update Endpoint WIP - Config: %+v", app)
 		})
 	})
 }

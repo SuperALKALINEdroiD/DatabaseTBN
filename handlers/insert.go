@@ -4,16 +4,31 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/SuperALKALINEdroiD/timelyDB/core"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/logs"
-	"github.com/SuperALKALINEdroiD/timelyDB/utils/storage"
 )
 
-func InsertHandler(config storage.WAL) http.HandlerFunc {
+func InsertHandler(config *core.App) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		logs.AddWalEntry(config) // WAL dependency
 
-		// TODO: send data to be logged into WAL for later reconstruction
-		// find which node to access
+		key := r.URL.Query().Get("key")
+
+		if key == "" {
+			http.Error(w, "Missing key", http.StatusUnprocessableEntity)
+			return
+		}
+
+		value := r.URL.Query().Get("value")
+
+		// find the node where this key will be saved
+		grpcNode, hashError := config.NodeHashInfo.GetNode(key)
+
+		if hashError != nil {
+			panic("Unable to get a node to store data")
+		}
+
+		logs.AddWalEntry(config.WAL, key, value, grpcNode) // WAL dependency
+
 		// rpc the node and insert
 		// return some response
 

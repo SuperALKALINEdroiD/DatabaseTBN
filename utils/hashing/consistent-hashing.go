@@ -67,7 +67,7 @@ func (c *ConsistentHashing) GetNode(key string) (string, error) {
 	hash := c.hashKey(key)
 
 	idx := sort.Search(len(c.nodes), func(i int) bool { return c.nodes[i] >= hash })
-	if idx == len(c.nodes) {
+	if idx == len(c.nodes) { // circular ring
 		idx = 0
 	}
 
