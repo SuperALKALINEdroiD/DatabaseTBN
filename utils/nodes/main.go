@@ -11,6 +11,7 @@ import (
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/hashing"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/storage"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type internalServer struct {
@@ -55,7 +56,7 @@ func nodeSetupTask(ctx context.Context, nodeID string, port string, config *conf
 	return &Node{ID: nodeID, Address: port, Storage: &nodeStorage}, nil
 }
 
-func LoadNodes(ctx context.Context, config *config.DatabaseConfig) ([]*Node, hashing.NodeHash) {
+func LoadServers(ctx context.Context, config *config.DatabaseConfig) ([]*Node, hashing.NodeHash) {
 	if len(config.Nodes) == 0 || config.NodeCount == 0 {
 		log.Println("No node configuration found.")
 		return []*Node{}, nil
@@ -82,4 +83,16 @@ func LoadNodes(ctx context.Context, config *config.DatabaseConfig) ([]*Node, has
 
 	log.Println("Nodes are up and running.")
 	return grpcNodes, clusterHashing
+}
+
+func StartGRPCClient(destNodeAddr string) (NodeServiceClient, *grpc.ClientConn) {
+	conn, err := grpc.NewClient(destNodeAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("gRPC client started on port ", destNodeAddr)
+	client := NewNodeServiceClient(conn)
+
+	return client, conn
 }

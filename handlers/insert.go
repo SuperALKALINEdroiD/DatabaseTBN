@@ -3,9 +3,11 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"sort"
 
 	"github.com/SuperALKALINEdroiD/timelyDB/core"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/logs"
+	"github.com/SuperALKALINEdroiD/timelyDB/utils/nodes"
 )
 
 func InsertHandler(config *core.App) http.HandlerFunc {
@@ -27,9 +29,16 @@ func InsertHandler(config *core.App) http.HandlerFunc {
 			panic("Unable to get a node to store data")
 		}
 
-		logs.AddWalEntry(config.WAL, key, value, grpcNode) // WAL dependency
+		logs.AddWalEntry(config.WAL, key, value, grpcNode)
 
-		// rpc the node and insert
+		destinationNodeIndex := sort.Search(len(config.Nodes), func(i int) bool { return config.Nodes[i].ID == grpcNode })
+
+		grpcClient, clientGenerationError := nodes.StartGRPCClient(config.Nodes[destinationNodeIndex].Address)
+
+		if clientGenerationError != nil {
+			panic("COULD NOT CREATE A CLIENT")
+		}
+
 		// return some response
 
 		w.WriteHeader(http.StatusOK)

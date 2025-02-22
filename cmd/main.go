@@ -33,7 +33,7 @@ func main() {
 		panic("error while loading config")
 	}
 
-	grpcNodes, nodeHashInfo := nodes.LoadNodes(ctx, config)
+	grpcNodes, nodeHashInfo := nodes.LoadServers(ctx, config)
 	wal := &storage.LocalWAL{}
 	wal.Connect("test-path")
 
