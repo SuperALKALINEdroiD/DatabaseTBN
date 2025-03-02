@@ -53,6 +53,7 @@ func (c *ConsistentHashing) RemoveNode(nodeID string) {
 	for key := range c.nodeMap {
 		c.nodes = append(c.nodes, key)
 	}
+
 	sort.Ints(c.nodes)
 }
 

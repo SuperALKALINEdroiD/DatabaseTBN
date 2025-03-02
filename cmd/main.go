@@ -48,11 +48,10 @@ func main() {
 
 	serverAddress := fmt.Sprintf(":%d", app.Config.Port)
 	log.Printf("Starting server on %s", serverAddress)
-
 	server := &http.Server{Addr: ":7001", Handler: router}
 
 	go func() {
-		log.Printf("Starting server on %s", serverAddress)
+		log.Printf("Starting to listen on %s", serverAddress)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server failed: %v", err)
 		}

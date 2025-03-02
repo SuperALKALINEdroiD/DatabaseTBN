@@ -14,10 +14,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-type internalServer struct {
-	UnimplementedNodeServiceServer
-}
-
 type Node struct {
 	ID      string
 	Address string
@@ -31,7 +27,7 @@ func nodeSetupTask(ctx context.Context, nodeID string, port string, config *conf
 	}
 
 	grpcServer := grpc.NewServer()
-	dataStoreServer := &internalServer{}
+	dataStoreServer := &internalNode{}
 	RegisterNodeServiceServer(grpcServer, dataStoreServer)
 	nodeStorage := storage.LocalKVStore{} // TODO: based on config
 
@@ -86,12 +82,13 @@ func LoadServers(ctx context.Context, config *config.DatabaseConfig) ([]*Node, h
 }
 
 func StartGRPCClient(destNodeAddr string) (NodeServiceClient, *grpc.ClientConn) {
-	conn, err := grpc.NewClient(destNodeAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	formattedAddress := fmt.Sprintf("localhost%s", destNodeAddr)
+	conn, err := grpc.NewClient(formattedAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Println("gRPC client started on port ", destNodeAddr)
+	log.Println("gRPC client started for node running at", formattedAddress)
 	client := NewNodeServiceClient(conn)
 
 	return client, conn

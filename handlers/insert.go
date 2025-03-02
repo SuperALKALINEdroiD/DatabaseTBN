@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"sort"
@@ -33,15 +34,23 @@ func InsertHandler(config *core.App) http.HandlerFunc {
 
 		destinationNodeIndex := sort.Search(len(config.Nodes), func(i int) bool { return config.Nodes[i].ID == grpcNode })
 
-		grpcClient, clientGenerationError := nodes.StartGRPCClient(config.Nodes[destinationNodeIndex].Address)
+		grpcClient, connection := nodes.StartGRPCClient(config.Nodes[destinationNodeIndex].Address)
+		defer connection.Close()
 
-		if clientGenerationError != nil {
-			panic("COULD NOT CREATE A CLIENT")
+		insertionPayload := &nodes.NodeManipulationRequest{
+			Node:      config.Nodes[destinationNodeIndex].Address,
+			Key:       key,
+			Value:     value,
+			Operation: nodes.Operation_CREATE,
 		}
 
-		// return some response
+		response, error := grpcClient.ManipulateNode(context.Background(), insertionPayload)
+
+		if error != nil {
+			panic(error)
+		}
 
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, "Insert Endpoint WIP")
+		fmt.Fprint(w, response.Status)
 	}
 }
