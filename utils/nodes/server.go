@@ -4,10 +4,13 @@ import (
 	context "context"
 	"log"
 	"time"
+
+	"github.com/SuperALKALINEdroiD/timelyDB/utils/storage"
 )
 
 type internalNode struct {
 	UnimplementedNodeServiceServer
+	Storage storage.KVStore
 }
 
 func (server *internalNode) ManipulateNode(ctx context.Context, request *NodeManipulationRequest) (*NodeResponse, error) {

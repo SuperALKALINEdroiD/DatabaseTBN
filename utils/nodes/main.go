@@ -17,7 +17,6 @@ import (
 type Node struct {
 	ID      string
 	Address string
-	Storage storage.KVStore
 }
 
 func nodeSetupTask(ctx context.Context, nodeID string, port string, config *config.DatabaseConfig) (*Node, error) {
@@ -27,9 +26,9 @@ func nodeSetupTask(ctx context.Context, nodeID string, port string, config *conf
 	}
 
 	grpcServer := grpc.NewServer()
-	dataStoreServer := &internalNode{}
-	RegisterNodeServiceServer(grpcServer, dataStoreServer)
 	nodeStorage := storage.LocalKVStore{} // TODO: based on config
+	dataStoreServer := &internalNode{Storage: &nodeStorage}
+	RegisterNodeServiceServer(grpcServer, dataStoreServer)
 
 	stop := make(chan struct{})
 
@@ -49,7 +48,7 @@ func nodeSetupTask(ctx context.Context, nodeID string, port string, config *conf
 		close(stop)
 	}()
 
-	return &Node{ID: nodeID, Address: port, Storage: &nodeStorage}, nil
+	return &Node{ID: nodeID, Address: port}, nil
 }
 
 func LoadServers(ctx context.Context, config *config.DatabaseConfig) ([]*Node, hashing.NodeHash) {
