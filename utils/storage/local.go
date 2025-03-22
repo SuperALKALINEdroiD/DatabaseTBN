@@ -3,6 +3,7 @@ package storage
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -47,6 +48,8 @@ func (localWAL *LocalWAL) WriteLog(data []byte) error {
 		log.Println("Error syncing file:", err)
 		return err
 	}
+
+	fmt.Printf("Log Added at %s", localWAL.GetPath())
 
 	return nil
 }

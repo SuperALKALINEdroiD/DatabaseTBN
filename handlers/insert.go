@@ -2,17 +2,25 @@ package handlers
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"net/http"
 	"sort"
 
+	"github.com/SuperALKALINEdroiD/timelyDB/config"
 	"github.com/SuperALKALINEdroiD/timelyDB/core"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/logs"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/nodes"
 )
 
-func InsertHandler(config *core.App) http.HandlerFunc {
+func InsertHandler(appConfig *core.App) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if appConfig.Config.MetaDataConfig.State != config.NodeStateReady {
+			w.WriteHeader(http.StatusTooEarly)
+			w.Write([]byte(`{"error": "Database is not ready. Please try again later."}`))
+			return
+		}
 
 		key := r.URL.Query().Get("key")
 
@@ -23,22 +31,21 @@ func InsertHandler(config *core.App) http.HandlerFunc {
 
 		value := r.URL.Query().Get("value")
 
-		// find the node where this key will be saved
-		grpcNode, hashError := config.NodeHashInfo.GetNode(key)
+		grpcNode, hashError := appConfig.NodeHashInfo.GetNode(key)
 
 		if hashError != nil {
 			panic("Unable to get a node to store data")
 		}
 
-		logs.AddWalEntry(config.WAL, key, value, grpcNode)
+		logs.AddWalEntry(appConfig.WAL, key, value, grpcNode)
 
-		destinationNodeIndex := sort.Search(len(config.Nodes), func(i int) bool { return config.Nodes[i].ID == grpcNode })
+		destinationNodeIndex := sort.Search(len(appConfig.Nodes), func(i int) bool { return appConfig.Nodes[i].ID == grpcNode }) % len(appConfig.Nodes)
 
-		grpcClient, connection := nodes.StartGRPCClient(config.Nodes[destinationNodeIndex].Address)
+		grpcClient, connection := nodes.StartGRPCClient(appConfig.Nodes[destinationNodeIndex].Address)
 		defer connection.Close()
 
 		insertionPayload := &nodes.NodeManipulationRequest{
-			Node:      config.Nodes[destinationNodeIndex].Address,
+			Node:      appConfig.Nodes[destinationNodeIndex].Address,
 			Key:       key,
 			Value:     value,
 			Operation: nodes.Operation_CREATE,
@@ -51,6 +58,10 @@ func InsertHandler(config *core.App) http.HandlerFunc {
 		}
 
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, response.Status)
+		err := json.NewEncoder(w).Encode(response)
+		if err != nil {
+			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+			return
+		}
 	}
 }

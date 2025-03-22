@@ -9,6 +9,7 @@ type WAL interface {
 	Storage
 	WriteLog(data []byte) error // write WAL logs
 	ReadLog(startLine, endLine int) ([]string, error)
+	GetPath() string
 	// TruncateLog(offset int64) error // clear log file
 	// Reconstruct(offset int64) error // reconstruct the data from WAL
 }

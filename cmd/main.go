@@ -7,15 +7,27 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/pprof"
 	"syscall"
 	"time"
 
 	"github.com/SuperALKALINEdroiD/timelyDB/core"
+	"github.com/SuperALKALINEdroiD/timelyDB/utils/logs"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/nodes"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/storage"
 )
 
 func main() {
+	f, err := os.Create("cpu_profile.prof")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	if err := pprof.StartCPUProfile(f); err != nil {
+		panic(err)
+	}
+	defer pprof.StopCPUProfile()
 	ctx, cancel := context.WithCancel(context.Background())
 
 	signalChannel := make(chan os.Signal, 1)
@@ -35,7 +47,7 @@ func main() {
 
 	grpcNodes, nodeHashInfo := nodes.LoadServers(ctx, config)
 	wal := &storage.LocalWAL{}
-	wal.Connect("test-path")
+	wal.Connect("wal-storage")
 
 	app := &core.App{
 		Config:       config,
@@ -43,6 +55,8 @@ func main() {
 		NodeHashInfo: nodeHashInfo,
 		WAL:          wal,
 	}
+
+	logs.ReplayLogs(app)
 
 	router := initRouter(app)
 
@@ -67,6 +81,6 @@ func main() {
 		log.Fatalf("Server shutdown failed: %v", err)
 	}
 
-	log.Println("Bye")
+	log.Println("Exiting, Bye!")
 
 }

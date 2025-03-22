@@ -18,7 +18,7 @@
 	 "mode": "KV",
 	 "inMemoryStorageThreshold": 2000,
 	 "metaDataConfig": {
-	 	 "state": "",
-	 	 "walPath": ""
+	 	 "state": 1,
+	 	 "walPath": "/var/lib/db/wal"
 	 }
 }

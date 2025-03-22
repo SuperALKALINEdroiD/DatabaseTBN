@@ -6,18 +6,22 @@ import (
 	"time"
 
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/storage"
+	"github.com/emirpasic/gods/trees/redblacktree"
 )
 
 type internalNode struct {
 	UnimplementedNodeServiceServer
-	Storage storage.KVStore
+	Storage  storage.KVStore
+	MemTable redblacktree.Tree
 }
 
 func (server *internalNode) ManipulateNode(ctx context.Context, request *NodeManipulationRequest) (*NodeResponse, error) {
 	log.Printf("Incoming %s request on manipulation procedure at %s", request.Operation, request.Node)
 
 	if request.Operation == Operation_CREATE {
-		println("==================================TODO==================================")
+		server.MemTable.Put(request.GetKey(), request)
+		log.Printf("Inserted using manipulation procedure at %s", request.Node)
+		// how to put the data on disk??
 	}
 
 	return &NodeResponse{

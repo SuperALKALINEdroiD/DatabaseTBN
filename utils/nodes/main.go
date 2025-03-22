@@ -10,6 +10,7 @@ import (
 	"github.com/SuperALKALINEdroiD/timelyDB/config"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/hashing"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/storage"
+	"github.com/emirpasic/gods/trees/redblacktree"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -27,7 +28,7 @@ func nodeSetupTask(ctx context.Context, nodeID string, port string, config *conf
 
 	grpcServer := grpc.NewServer()
 	nodeStorage := storage.LocalKVStore{} // TODO: based on config
-	dataStoreServer := &internalNode{Storage: &nodeStorage}
+	dataStoreServer := &internalNode{Storage: &nodeStorage, MemTable: *redblacktree.NewWithStringComparator()}
 	RegisterNodeServiceServer(grpcServer, dataStoreServer)
 
 	stop := make(chan struct{})

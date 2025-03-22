@@ -13,12 +13,25 @@ type DatabaseConfig struct {
 	NodeCount                int            `json:"nodeCount"`
 	Mode                     StoreMode      `json:"mode"`
 	InMemoryStorageThreshold int64          `json:"inMemoryStorageThreshold"`
-	MetaDataConfig           MetaDataConfig `json:"metaDataConfig"` // will use to store cluster state
+	MetaDataConfig           MetaDataConfig `json:"metaDataConfig"`
 }
 
 type MetaDataConfig struct {
-	State   string `json:"state"`
-	WALPath string `json:"walPath"`
+	State   NodeState `json:"state"`
+	WALPath string    `json:"walPath"`
+}
+
+type NodeState int
+
+const (
+	NodeStateBuilding NodeState = iota
+	NodeStateReady
+	NodeStateRebalancing
+	NodeStateDown
+)
+
+func (s NodeState) String() string {
+	return [...]string{"Building", "Ready", "Rebalancing", "Down"}[s]
 }
 
 const (
@@ -50,16 +63,19 @@ func GenerateExampleConfig(nodeCount int, host string) DatabaseConfig {
 		Nodes:                    nodes,
 		NodeCount:                nodeCount,
 		InMemoryStorageThreshold: 2000,
+		MetaDataConfig: MetaDataConfig{
+			State:   NodeStateReady,
+			WALPath: "/var/lib/db/wal",
+		},
 	}
 }
 
-func generateNodeConfig(nodeCount int, host string) (nodes []NodeConfig) {
-	nodes = make([]NodeConfig, nodeCount)
+func generateNodeConfig(nodeCount int, host string) []NodeConfig {
+	nodes := make([]NodeConfig, nodeCount)
 	for i := 0; i < nodeCount; i++ {
 		nodes[i] = NodeConfig{
-			Endpoint: fmt.Sprintf("%s:%d", host, 50051+i), // TODO: fix a port number format
+			Endpoint: fmt.Sprintf("%s:%d", host, 50051+i),
 		}
 	}
-
-	return
+	return nodes
 }

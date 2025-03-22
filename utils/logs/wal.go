@@ -3,6 +3,7 @@ package logs
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/storage"
@@ -30,7 +31,7 @@ func AddWalEntry(wal storage.WAL, key string, value string, nodeId string) {
 		EntryID:   uuid.New().String(),
 		NodeID:    nodeId,
 		Timestamp: time.Now(),
-		Data:      []byte(fmt.Sprintf("%s:::%s", key, value)),
+		Data:      fmt.Appendf(nil, "%s:::%s", key, value),
 		Status:    Committed,
 	}
 
@@ -44,4 +45,6 @@ func AddWalEntry(wal storage.WAL, key string, value string, nodeId string) {
 	if err := wal.WriteLog(logData); err != nil {
 		panic("Failed to write to write-ahead logs")
 	}
+
+	log.Printf("ADDED: %s :: %s to Write Ahead Logs", key, value)
 }
