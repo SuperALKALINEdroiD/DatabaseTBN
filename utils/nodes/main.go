@@ -82,13 +82,12 @@ func LoadServers(ctx context.Context, config *config.DatabaseConfig) ([]*Node, h
 }
 
 func StartGRPCClient(destNodeAddr string) (NodeServiceClient, *grpc.ClientConn) {
-	formattedAddress := fmt.Sprintf("localhost%s", destNodeAddr)
-	conn, err := grpc.NewClient(formattedAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(destNodeAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	log.Println("gRPC client started for node running at", formattedAddress)
+	log.Println("gRPC client started for node running at", destNodeAddr)
 	client := NewNodeServiceClient(conn)
 
 	return client, conn
