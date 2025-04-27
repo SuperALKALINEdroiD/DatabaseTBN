@@ -40,8 +40,6 @@ func AddWalEntry(wal storage.WAL, key string, value string, nodeId string) {
 		panic("Failed to serialize the log entry")
 	}
 
-	logData = append(logData, '\n')
-
 	if err := wal.WriteLog(logData); err != nil {
 		panic("Failed to write to write-ahead logs")
 	}

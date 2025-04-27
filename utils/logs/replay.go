@@ -11,5 +11,7 @@ func ReplayLogs(appConfig *core.App) {
 		appConfig.Config.MetaDataConfig.State = config.NodeStateReady
 	}()
 
+	// appConfig.WAL.ReadLog()
+
 	// replay logs to rebuild the db
 }

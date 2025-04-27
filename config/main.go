@@ -5,17 +5,14 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+
+	"github.com/go-playground/validator/v10"
 )
 
 func LoadConfig(filePath string) (*DatabaseConfig, error) {
 	if filePath == "" {
-		config, error := GenerateConfig("default-config.json")
-
-		if error != nil {
-			return nil, fmt.Errorf("failed to create config file: %v", error)
-		}
-
-		return config, nil
+		return GenerateConfig()
 	}
 
 	file, err := os.Open(filePath)
@@ -43,8 +40,22 @@ func LoadConfig(filePath string) (*DatabaseConfig, error) {
 }
 
 func (config *DatabaseConfig) validateConfig() bool {
-	if len(config.Nodes) == 0 {
+	if len(config.Nodes) == 0 && config.NodeCount > 0 {
 		config.Nodes = generateNodeConfig(config.NodeCount, "")
+	}
+	validate := validator.New()
+	err := validate.Struct(config)
+	if err != nil {
+		for _, err := range err.(validator.ValidationErrors) {
+			log.Printf("Validation error: Field '%s', Tag: '%s', Param: '%s'\n", err.Field(), err.Tag(), err.Param())
+		}
+
+		return false
+	}
+
+	if len(config.Nodes) != config.NodeCount {
+		log.Printf("Validation error: Node count mismatch. Expected %d nodes, but got %d nodes.\n", config.NodeCount, len(config.Nodes))
+		return false
 	}
 
 	return true
@@ -68,21 +79,39 @@ func (c *DatabaseConfig) SaveConfig(filePath string) error {
 	return nil
 }
 
-func GenerateConfig(filePath string) (*DatabaseConfig, error) {
-	file, err := os.Create(filePath)
+func GenerateConfig() (*DatabaseConfig, error) {
+	defaultConfigFile := "default-config.json"
+
+	configDir, configDirError := os.UserConfigDir()
+	if configDirError != nil {
+		log.Println("Error getting user's config directory:", configDirError)
+		return nil, configDirError
+	}
+
+	defaultDbPath := filepath.Join(configDir, "timely")
+
+	configData := GenerateExampleConfig(2, "localhost")
+
+	data, err := json.Marshal(configData)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create config file: %v", err)
-	}
-	defer file.Close()
-
-	exampleConfig := GenerateExampleConfig(2, "") // if no config, start with 1 node on local machine
-
-	encoder := json.NewEncoder(file)
-	encoder.SetIndent("", "	 ")
-	if err := encoder.Encode(exampleConfig); err != nil {
-		return nil, fmt.Errorf("failed to save config file, error on encoder: %v", err)
+		fmt.Println("Error marshalling example config:", err)
+		return nil, err
 	}
 
-	log.Println("Configuration file created successfully at:", filePath)
-	return &exampleConfig, nil
+	if _, err := os.Stat(defaultDbPath); os.IsNotExist(err) {
+		err := os.MkdirAll(defaultDbPath, os.ModePerm)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	defaultConfigPath := filepath.Join(defaultDbPath, defaultConfigFile)
+
+	err = os.WriteFile(defaultConfigPath, data, 0644)
+	if err != nil {
+		fmt.Println("Error writing config to file:", err)
+		return nil, err
+	}
+
+	return &configData, nil
 }

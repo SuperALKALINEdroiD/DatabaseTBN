@@ -14,15 +14,14 @@ import (
 )
 
 func initEnvironment() (*config.DatabaseConfig, error) {
-	var configPath = os.Getenv("CONFIG_PATH")
-
-	fmt.Println(configPath)
+	var configPath = os.Getenv("LOG_BASE_SETTINGS")
 
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		log.Printf("Error loading configuration: %v", err)
 		return nil, err
 	}
+
 	return cfg, nil
 }
 

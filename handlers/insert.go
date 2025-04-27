@@ -17,8 +17,7 @@ func InsertHandler(appConfig *core.App) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 
 		if appConfig.Config.MetaDataConfig.State != config.NodeStateReady {
-			w.WriteHeader(http.StatusTooEarly)
-			w.Write([]byte(`{"error": "Database is not ready. Please try again later."}`))
+			http.Error(w, "Database is not in ready state", http.StatusTooEarly)
 			return
 		}
 
