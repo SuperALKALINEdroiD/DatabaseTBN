@@ -25,6 +25,12 @@ func initEnvironment() (*config.DatabaseConfig, error) {
 	return cfg, nil
 }
 
+func GetAppPath() string {
+	path := config.GetAppPath()
+
+	return path
+}
+
 func initRouter(app *core.App) *chi.Mux {
 	router := chi.NewRouter()
 	addMiddlewares(router)

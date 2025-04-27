@@ -82,14 +82,7 @@ func (c *DatabaseConfig) SaveConfig(filePath string) error {
 func GenerateConfig() (*DatabaseConfig, error) {
 	defaultConfigFile := "default-config.json"
 
-	configDir, configDirError := os.UserConfigDir()
-	if configDirError != nil {
-		log.Println("Error getting user's config directory:", configDirError)
-		return nil, configDirError
-	}
-
-	defaultDbPath := filepath.Join(configDir, "timely")
-
+	defaultDbPath := GetAppPath()
 	configData := GenerateExampleConfig(2, "localhost")
 
 	data, err := json.Marshal(configData)
@@ -114,4 +107,13 @@ func GenerateConfig() (*DatabaseConfig, error) {
 	}
 
 	return &configData, nil
+}
+func GetAppPath() (configDir string) {
+	configDir, configDirError := os.UserConfigDir()
+
+	if configDirError != nil {
+		panic(configDirError)
+	}
+
+	return filepath.Join(configDir, "timely")
 }

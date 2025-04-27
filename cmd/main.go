@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime/pprof"
 	"syscall"
 	"time"
@@ -47,7 +48,8 @@ func main() {
 
 	grpcNodes, nodeHashInfo := nodes.LoadServers(ctx, config)
 	wal := &storage.LocalWAL{}
-	wal.Connect("wal-storage")
+	appPath := GetAppPath()
+	wal.Connect(filepath.Join(appPath, config.MetaDataConfig.WALName))
 
 	app := &core.App{
 		Config:       config,
