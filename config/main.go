@@ -15,6 +15,8 @@ func LoadConfig(filePath string) (*DatabaseConfig, error) {
 		return GenerateConfig()
 	}
 
+	log.Printf("Loading config at %s", filePath)
+
 	file, err := os.Open(filePath)
 
 	if err != nil {
@@ -85,6 +87,9 @@ func GenerateConfig() (*DatabaseConfig, error) {
 	defaultDbPath := GetAppPath()
 	configData := GenerateExampleConfig(2, "localhost")
 
+	defaultConfigPath := filepath.Join(defaultDbPath, defaultConfigFile)
+	os.Setenv("LOG_BASE_SETTINGS", defaultDbPath)
+
 	data, err := json.Marshal(configData)
 	if err != nil {
 		fmt.Println("Error marshalling example config:", err)
@@ -97,8 +102,6 @@ func GenerateConfig() (*DatabaseConfig, error) {
 			return nil, err
 		}
 	}
-
-	defaultConfigPath := filepath.Join(defaultDbPath, defaultConfigFile)
 
 	err = os.WriteFile(defaultConfigPath, data, 0644)
 	if err != nil {
