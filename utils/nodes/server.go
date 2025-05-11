@@ -81,6 +81,7 @@ func (server *internalNode) BatchSearch(ctx context.Context, request *NodeBatchR
 func (server *internalNode) BatchManipulate(ctx context.Context, request *NodeBatchRequest) (*NodeBatchResponse, error) {
 	responses := []*NodeResponse{}
 	for _, node := range request.Searches {
+
 		responses = append(responses, &NodeResponse{
 			Status:       Status_OK,
 			Timestamp:    time.Now().String(),

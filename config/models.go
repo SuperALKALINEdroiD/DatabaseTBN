@@ -1,19 +1,24 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/SuperALKALINEdroiD/timelyDB/manifest"
+)
 
 type StoreMode string
 
 type DatabaseConfig struct {
-	StoreName                string         `json:"dbName" validate:"required"`
-	Port                     int            `json:"port" validate:"required,gt=0"`
-	IsLockEnabled            bool           `json:"isLockEnabled"`
-	TimelyConfig             TimelyConfig   `json:"timelyConfig"`
-	Nodes                    []NodeConfig   `json:"nodes" validate:"required"`
-	NodeCount                int            `json:"nodeCount" validate:"required,gt=0"`
-	Mode                     StoreMode      `json:"mode" validate:"required"`
-	InMemoryStorageThreshold int64          `json:"inMemoryStorageThreshold" validate:"required,gt=0"`
-	MetaDataConfig           MetaDataConfig `json:"metaDataConfig" validate:"required"`
+	StoreName                string            `json:"dbName" validate:"required"`
+	Port                     int               `json:"port" validate:"required,gt=0"`
+	IsLockEnabled            bool              `json:"isLockEnabled"`
+	TimelyConfig             TimelyConfig      `json:"timelyConfig"`
+	Nodes                    []NodeConfig      `json:"nodes" validate:"required"`
+	NodeCount                int               `json:"nodeCount" validate:"required,gt=0"`
+	Mode                     StoreMode         `json:"mode" validate:"required"`
+	InMemoryStorageThreshold int64             `json:"inMemoryStorageThreshold" validate:"required,gt=0"`
+	MetaDataConfig           MetaDataConfig    `json:"metaDataConfig" validate:"required"`
+	Manifest                 manifest.Manifest `validate:"omitempty"`
 }
 
 type MetaDataConfig struct {

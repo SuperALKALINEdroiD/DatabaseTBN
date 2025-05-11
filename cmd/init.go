@@ -9,6 +9,7 @@ import (
 	"github.com/SuperALKALINEdroiD/timelyDB/config"
 	"github.com/SuperALKALINEdroiD/timelyDB/core"
 	"github.com/SuperALKALINEdroiD/timelyDB/handlers"
+	"github.com/SuperALKALINEdroiD/timelyDB/utils/common"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
 )
@@ -26,7 +27,7 @@ func initEnvironment() (*config.DatabaseConfig, error) {
 }
 
 func GetAppPath() string {
-	path := config.GetAppPath()
+	path := common.GetAppPath()
 
 	return path
 }

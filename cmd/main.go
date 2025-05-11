@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/SuperALKALINEdroiD/timelyDB/core"
+	"github.com/SuperALKALINEdroiD/timelyDB/utils/common"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/logs"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/nodes"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/storage"
@@ -48,7 +49,7 @@ func main() {
 
 	grpcNodes, nodeHashInfo := nodes.LoadServers(ctx, config)
 	wal := &storage.LocalWAL{}
-	appPath := GetAppPath()
+	appPath := common.GetAppPath()
 	wal.Connect(filepath.Join(appPath, config.MetaDataConfig.WALName))
 
 	app := &core.App{
@@ -63,7 +64,7 @@ func main() {
 	router := initRouter(app)
 
 	serverAddress := fmt.Sprintf(":%d", app.Config.Port)
-	log.Printf("Starting server on %s", serverAddress)
+	log.Printf("Starting %s server on %s", config.StoreName, serverAddress)
 	server := &http.Server{Addr: ":7001", Handler: router}
 
 	go func() {

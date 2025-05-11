@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/SuperALKALINEdroiD/timelyDB/manifest"
+	"github.com/SuperALKALINEdroiD/timelyDB/utils/common"
 	"github.com/go-playground/validator/v10"
 )
 
@@ -20,6 +22,11 @@ func LoadConfig(filePath string) (*DatabaseConfig, error) {
 	file, err := os.Open(filePath)
 
 	if err != nil {
+		if os.IsNotExist(err) {
+			log.Println("Config file not found. Generating default config.")
+			return GenerateConfig()
+		}
+
 		return nil, fmt.Errorf("failed to open config file: %v", err)
 	}
 
@@ -34,6 +41,11 @@ func LoadConfig(filePath string) (*DatabaseConfig, error) {
 	}
 
 	if config.validateConfig() {
+		manifest, err := manifest.GetManifest()
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse config file: %v", err)
+		}
+		config.Manifest = *manifest
 		return &config, nil
 	}
 
@@ -84,7 +96,7 @@ func (c *DatabaseConfig) SaveConfig(filePath string) error {
 func GenerateConfig() (*DatabaseConfig, error) {
 	defaultConfigFile := "default-config.json"
 
-	defaultDbPath := GetAppPath()
+	defaultDbPath := common.GetAppPath()
 	configData := GenerateExampleConfig(2, "localhost")
 
 	defaultConfigPath := filepath.Join(defaultDbPath, defaultConfigFile)
@@ -109,14 +121,12 @@ func GenerateConfig() (*DatabaseConfig, error) {
 		return nil, err
 	}
 
-	return &configData, nil
-}
-func GetAppPath() (configDir string) {
-	configDir, configDirError := os.UserConfigDir()
-
-	if configDirError != nil {
-		panic(configDirError)
+	manifest, err := manifest.GetManifest()
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse config file: %v", err)
 	}
 
-	return filepath.Join(configDir, "timely")
+	configData.Manifest = *manifest
+
+	return &configData, nil
 }
