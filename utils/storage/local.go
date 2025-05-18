@@ -135,6 +135,10 @@ func (localKVStore *LocalKVStore) Delete(key string) error {
 	return nil
 }
 
+func (LocalKVStore *LocalKVStore) Compaction() error {
+	return nil
+}
+
 type LocalLogStore struct {
 }
 

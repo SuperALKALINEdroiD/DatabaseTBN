@@ -3,6 +3,7 @@ package nodes
 import (
 	context "context"
 	"log"
+	sync "sync"
 	"time"
 
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/storage"
@@ -11,17 +12,24 @@ import (
 
 type internalNode struct {
 	UnimplementedNodeServiceServer
-	Storage  storage.KVStore
-	MemTable redblacktree.Tree
+	Storage     storage.KVStore
+	MemTable    redblacktree.Tree
+	memTableMux sync.RWMutex
 }
 
 func (server *internalNode) ManipulateNode(ctx context.Context, request *NodeManipulationRequest) (*NodeResponse, error) {
 	log.Printf("Incoming %s request on manipulation procedure at %s", request.Operation, request.Node)
 
+	server.memTableMux.Lock()
+	defer server.memTableMux.Unlock()
+
 	if request.Operation == Operation_CREATE {
-		server.MemTable.Put(request.GetKey(), request)
+		memTableSize := server.getTreeSize()
+		if memTableSize > 0 {
+			server.flushMemTableToMemory()
+		}
+		server.MemTable.Put(request.GetKey(), request.GetValue())
 		log.Printf("Inserted using manipulation procedure at %s", request.Node)
-		// how to put the data on disk??
 	}
 
 	return &NodeResponse{
@@ -113,4 +121,13 @@ func (server *internalNode) StreamNodeUpdates(stream NodeService_StreamNodeUpdat
 			return err
 		}
 	}
+}
+
+func (server *internalNode) getTreeSize() int {
+	return 2
+}
+
+func (server *internalNode) flushMemTableToMemory() {
+
+	server.MemTable.Clear()
 }

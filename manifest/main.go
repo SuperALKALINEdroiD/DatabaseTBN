@@ -85,6 +85,5 @@ func GetManifest() (*Manifest, error) {
 }
 
 func (manifest Manifest) validateManifest() bool {
-	// TODO
 	return true
 }

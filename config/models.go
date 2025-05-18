@@ -67,7 +67,7 @@ func GenerateExampleConfig(nodeCount int, host string) DatabaseConfig {
 		Mode:                     KV,
 		Nodes:                    nodes,
 		NodeCount:                nodeCount,
-		InMemoryStorageThreshold: 2000,
+		InMemoryStorageThreshold: 2024, // 2MB
 		MetaDataConfig: MetaDataConfig{
 			State:   NodeStateReady,
 			WALName: "wal-storage",
