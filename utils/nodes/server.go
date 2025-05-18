@@ -1,19 +1,23 @@
 package nodes
 
 import (
-	context "context"
+	"context"
+	"fmt"
 	"log"
-	sync "sync"
+	"sync"
 	"time"
+	"unsafe"
 
+	"github.com/SuperALKALINEdroiD/timelyDB/config"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/storage"
 	"github.com/emirpasic/gods/trees/redblacktree"
 )
 
 type internalNode struct {
 	UnimplementedNodeServiceServer
-	Storage     storage.KVStore
-	MemTable    redblacktree.Tree
+	storage     storage.KVStore
+	memTable    redblacktree.Tree
+	dbConfig    config.DatabaseConfig
 	memTableMux sync.RWMutex
 }
 
@@ -24,11 +28,10 @@ func (server *internalNode) ManipulateNode(ctx context.Context, request *NodeMan
 	defer server.memTableMux.Unlock()
 
 	if request.Operation == Operation_CREATE {
-		memTableSize := server.getTreeSize()
-		if memTableSize > 0 {
+		if server.shouldFlushToMemory() {
 			server.flushMemTableToMemory()
 		}
-		server.MemTable.Put(request.GetKey(), request.GetValue())
+		server.memTable.Put(request.GetKey(), request.GetValue())
 		log.Printf("Inserted using manipulation procedure at %s", request.Node)
 	}
 
@@ -123,11 +126,27 @@ func (server *internalNode) StreamNodeUpdates(stream NodeService_StreamNodeUpdat
 	}
 }
 
-func (server *internalNode) getTreeSize() int {
-	return 2
+func (server *internalNode) shouldFlushToMemory() bool {
+	nodeCount := server.memTable.Size()
+	var sampleNode redblacktree.Node
+	nodeSize := int64(unsafe.Sizeof(sampleNode))
+	totalSize := int64(nodeCount) * nodeSize
+
+	fmt.Println(totalSize, "totalSize")
+
+	return totalSize > server.dbConfig.InMemoryStorageThreshold
 }
 
 func (server *internalNode) flushMemTableToMemory() {
+	log.Println("Starting memory flush to persistant storage")
+	defer log.Println("Completed Memory write, Continuing normal operations")
 
-	server.MemTable.Clear()
+	keysInTable := server.memTable.Keys()
+
+	for index, value := range keysInTable {
+		fmt.Println(index, value.(string))
+	}
+
+	defer server.memTable.Clear()
+
 }

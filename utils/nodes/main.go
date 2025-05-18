@@ -28,7 +28,7 @@ func nodeSetupTask(ctx context.Context, nodeID string, port string, config *conf
 
 	grpcServer := grpc.NewServer()
 	nodeStorage := storage.LocalKVStore{} // TODO: based on config
-	dataStoreServer := &internalNode{Storage: &nodeStorage, MemTable: *redblacktree.NewWithStringComparator()}
+	dataStoreServer := &internalNode{storage: &nodeStorage, memTable: *redblacktree.NewWithStringComparator(), dbConfig: *config}
 	RegisterNodeServiceServer(grpcServer, dataStoreServer)
 
 	stop := make(chan struct{})

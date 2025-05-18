@@ -112,6 +112,7 @@ type LocalKVStore struct {
 }
 
 func (localKVStore *LocalKVStore) Connect(path string) error {
+
 	return nil
 }
 
