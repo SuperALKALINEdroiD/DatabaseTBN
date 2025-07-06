@@ -14,3 +14,7 @@ func GetAppPath() (configDir string) {
 
 	return filepath.Join(configDir, "timely")
 }
+
+func findDestinationNode() {
+
+}

@@ -46,13 +46,16 @@ func (server *internalNode) ManipulateNode(ctx context.Context, request *NodeMan
 }
 
 func (server *internalNode) SearchNode(ctx context.Context, request *NodeSearchRequest) (*NodeResponse, error) {
+
+	searhResult, _ := server.memTable.Get(request.Key)
+
 	return &NodeResponse{
 		Status:       Status_OK,
 		Timestamp:    time.Now().String(),
 		Node:         request.Node,
 		Key:          request.Key,
-		Value:        "DummyValue", // Dummy response
-		ErrorMessage: "",
+		Value:        searhResult.(string),
+		ErrorMessage: "Not Found",
 	}, nil
 }
 
@@ -131,8 +134,6 @@ func (server *internalNode) shouldFlushToMemory() bool {
 	var sampleNode redblacktree.Node
 	nodeSize := int64(unsafe.Sizeof(sampleNode))
 	totalSize := int64(nodeCount) * nodeSize
-
-	fmt.Println(totalSize, "totalSize")
 
 	return totalSize > server.dbConfig.InMemoryStorageThreshold
 }

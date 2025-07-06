@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime/pprof"
 	"syscall"
 	"time"
 
@@ -26,10 +25,10 @@ func main() {
 	}
 	defer f.Close()
 
-	if err := pprof.StartCPUProfile(f); err != nil {
-		panic(err)
-	}
-	defer pprof.StopCPUProfile()
+	// if err := pprof.StartCPUProfile(f); err != nil {
+	// 	panic(err)
+	// }
+	// defer pprof.StopCPUProfile()
 	ctx, cancel := context.WithCancel(context.Background())
 
 	signalChannel := make(chan os.Signal, 1)

@@ -100,7 +100,7 @@ func GenerateConfig() (*DatabaseConfig, error) {
 	configData := GenerateExampleConfig(2, "localhost")
 
 	defaultConfigPath := filepath.Join(defaultDbPath, defaultConfigFile)
-	os.Setenv("LOG_BASE_SETTINGS", defaultDbPath)
+	os.Setenv("DATABASE_SETTINGS", defaultDbPath)
 
 	data, err := json.Marshal(configData)
 	if err != nil {

@@ -60,6 +60,8 @@ func initRoutes(router *chi.Mux, app *core.App) {
 
 		r.Post("/insert", handlers.InsertHandler(app))
 
+		r.Get("", handlers.GetValue(app))
+
 		r.Post("/update", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			fmt.Fprintf(w, "Update Endpoint WIP - Config: %+v", app)
