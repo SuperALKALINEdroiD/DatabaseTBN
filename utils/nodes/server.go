@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 	"unsafe"
@@ -28,9 +30,7 @@ func (server *internalNode) ManipulateNode(ctx context.Context, request *NodeMan
 	defer server.memTableMux.Unlock()
 
 	if request.Operation == Operation_CREATE {
-		if server.shouldFlushToMemory() {
-			server.flushMemTableToMemory()
-		}
+		server.flushMemTableToMemory()
 		server.memTable.Put(request.GetKey(), request.GetValue())
 		log.Printf("Inserted using manipulation procedure at %s", request.Node)
 	}
@@ -139,15 +139,68 @@ func (server *internalNode) shouldFlushToMemory() bool {
 }
 
 func (server *internalNode) flushMemTableToMemory() {
-	log.Println("Starting memory flush to persistant storage")
+	if !server.shouldFlushToMemory() {
+		log.Println("In memory storage within threshold, skipped memory write")
+		return
+	}
+	log.Println("Starting memory flush to persistent storage")
 	defer log.Println("Completed Memory write, Continuing normal operations")
 
-	keysInTable := server.memTable.Keys()
+	keys := server.memTable.Keys()
+	kvData := make(map[any]any)
 
-	for index, value := range keysInTable {
-		fmt.Println(index, value.(string))
+	for _, key := range keys {
+		value, ok := server.memTable.Get(key)
+		if ok {
+			kvData[key] = value
+		}
 	}
 
-	defer server.memTable.Clear()
+	err := server.atomicFlushToDisk(kvData)
+	if err != nil {
+		log.Printf("Error during flush: %v", err)
+		return
+	}
 
+	server.memTable.Clear()
+}
+
+func (server *internalNode) atomicFlushToDisk(kvData map[any]any) error {
+	manifest := server.dbConfig.Manifest
+	basePath := manifest.SSTables[0].Path // temporary
+
+	tmpSST := filepath.Join(basePath, "kv.tmp.sst")
+	tmpBloom := filepath.Join(basePath, "filter.tmp.bf")
+
+	finalSST := filepath.Join(basePath, "kv.sst")
+	finalBloom := filepath.Join(basePath, "filter.bf")
+
+	if err := server.writeToSSt(); err != nil {
+		return fmt.Errorf("SST write failed: %w", err)
+	}
+
+	if err := server.writeToBloom(); err != nil {
+		os.Remove(tmpSST)
+		return fmt.Errorf("BLOOM WRITE FAILED: %w", err)
+	}
+
+	if err := os.Rename(tmpSST, finalSST); err != nil {
+		os.Remove(tmpSST)
+		os.Remove(tmpBloom)
+		return fmt.Errorf("SST WRITE FAILED: %w", err)
+	}
+	if err := os.Rename(tmpBloom, finalBloom); err != nil {
+		os.Remove(finalSST)
+		return fmt.Errorf("TEMP RENAME FAILED: %w", err)
+	}
+
+	return nil
+}
+
+func (Server *internalNode) writeToBloom() error {
+	return nil
+}
+
+func (Server *internalNode) writeToSSt() error {
+	return nil
 }
