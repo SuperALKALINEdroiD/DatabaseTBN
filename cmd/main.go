@@ -19,16 +19,14 @@ import (
 )
 
 func main() {
+	log.SetPrefix(fmt.Sprintf("DB LOGS [%s] ", time.Now().Format(time.RFC3339)))
+
 	f, err := os.Create("cpu_profile.prof")
 	if err != nil {
 		panic(err)
 	}
 	defer f.Close()
 
-	// if err := pprof.StartCPUProfile(f); err != nil {
-	// 	panic(err)
-	// }
-	// defer pprof.StopCPUProfile()
 	ctx, cancel := context.WithCancel(context.Background())
 
 	signalChannel := make(chan os.Signal, 1)
