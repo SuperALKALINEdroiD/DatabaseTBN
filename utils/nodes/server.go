@@ -4,13 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 	"unsafe"
 
 	"github.com/SuperALKALINEdroiD/timelyDB/config"
+	"github.com/SuperALKALINEdroiD/timelyDB/utils/common"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/storage"
 	"github.com/emirpasic/gods/trees/redblacktree"
 )
@@ -24,13 +23,16 @@ type internalNode struct {
 }
 
 func (server *internalNode) ManipulateNode(ctx context.Context, request *NodeManipulationRequest) (*NodeResponse, error) {
-	log.Printf("Incoming %s request on manipulation procedure at %s", request.Operation, request.Node)
+	prefix := common.LogPrefix()
+	log.Printf("%s :: Incoming %s request on manipulation procedure at %s", prefix, request.Operation, request.Node)
 
 	server.memTableMux.Lock()
 	defer server.memTableMux.Unlock()
 
 	if request.Operation == Operation_CREATE {
-		server.flushMemTableToMemory()
+		if server.shouldFlushToMemory() {
+			defer server.flushMemTableToMemory()
+		}
 		server.memTable.Put(request.GetKey(), request.GetValue())
 		log.Printf("Inserted using manipulation procedure at %s", request.Node)
 	}
@@ -47,7 +49,20 @@ func (server *internalNode) ManipulateNode(ctx context.Context, request *NodeMan
 
 func (server *internalNode) SearchNode(ctx context.Context, request *NodeSearchRequest) (*NodeResponse, error) {
 
-	searhResult, _ := server.memTable.Get(request.Key)
+	searhResult, found := server.memTable.Get(request.Key)
+
+	fmt.Println("SearchResult", searhResult)
+
+	if !found {
+		return &NodeResponse{
+			Status:       Status_NOT_FOUND,
+			Timestamp:    time.Now().String(),
+			Node:         request.Node,
+			Key:          request.Key,
+			Value:        "",
+			ErrorMessage: "Not Found",
+		}, nil
+	}
 
 	return &NodeResponse{
 		Status:       Status_OK,
@@ -55,7 +70,7 @@ func (server *internalNode) SearchNode(ctx context.Context, request *NodeSearchR
 		Node:         request.Node,
 		Key:          request.Key,
 		Value:        searhResult.(string),
-		ErrorMessage: "Not Found",
+		ErrorMessage: "",
 	}, nil
 }
 
@@ -131,76 +146,31 @@ func (server *internalNode) StreamNodeUpdates(stream NodeService_StreamNodeUpdat
 
 func (server *internalNode) shouldFlushToMemory() bool {
 	nodeCount := server.memTable.Size()
-	var sampleNode redblacktree.Node
-	nodeSize := int64(unsafe.Sizeof(sampleNode))
-	totalSize := int64(nodeCount) * nodeSize
-
-	return totalSize > server.dbConfig.InMemoryStorageThreshold
-}
-
-func (server *internalNode) flushMemTableToMemory() {
-	if !server.shouldFlushToMemory() {
-		log.Println("In memory storage within threshold, skipped memory write")
-		return
+	if nodeCount == 0 {
+		return false
 	}
-	log.Println("Starting memory flush to persistent storage")
-	defer log.Println("Completed Memory write, Continuing normal operations")
+
+	var sampleNode redblacktree.Node
+	nodeOverhead := int64(unsafe.Sizeof(sampleNode))
 
 	keys := server.memTable.Keys()
-	kvData := make(map[any]any)
+	totalDataSize := int64(0)
 
 	for _, key := range keys {
-		value, ok := server.memTable.Get(key)
-		if ok {
-			kvData[key] = value
+		if keyStr, ok := key.(string); ok {
+			totalDataSize += int64(len(keyStr))
+		}
+
+		// Size of value string
+		if value, ok := server.memTable.Get(key); ok {
+			if valueStr, ok := value.(string); ok {
+				totalDataSize += int64(len(valueStr))
+			}
 		}
 	}
 
-	err := server.atomicFlushToDisk(kvData)
-	if err != nil {
-		log.Printf("Error during flush: %v", err)
-		return
-	}
+	const stringHeaderSize = 16 //
+	totalSize := (int64(nodeCount) * nodeOverhead) + totalDataSize + (int64(nodeCount) * 2 * stringHeaderSize)
 
-	server.memTable.Clear()
-}
-
-func (server *internalNode) atomicFlushToDisk(kvData map[any]any) error {
-	manifest := server.dbConfig.Manifest
-	basePath := manifest.SSTables[0].Path // temporary
-
-	tmpSST := filepath.Join(basePath, "kv.tmp.sst")
-	tmpBloom := filepath.Join(basePath, "filter.tmp.bf")
-
-	finalSST := filepath.Join(basePath, "kv.sst")
-	finalBloom := filepath.Join(basePath, "filter.bf")
-
-	if err := server.writeToSSt(); err != nil {
-		return fmt.Errorf("SST write failed: %w", err)
-	}
-
-	if err := server.writeToBloom(); err != nil {
-		os.Remove(tmpSST)
-		return fmt.Errorf("BLOOM WRITE FAILED: %w", err)
-	}
-
-	if err := os.Rename(tmpSST, finalSST); err != nil {
-		os.Remove(tmpSST)
-		os.Remove(tmpBloom)
-		return fmt.Errorf("SST WRITE FAILED: %w", err)
-	}
-	if err := os.Rename(tmpBloom, finalBloom); err != nil {
-		os.Remove(finalSST)
-		return fmt.Errorf("TEMP RENAME FAILED: %w", err)
-	}
-
-	return nil
-}
-
-func (Server *internalNode) writeToBloom() error {
-	return nil
-}
-
-func (Server *internalNode) writeToSSt() error {
-	return nil
+	return totalSize > server.dbConfig.InMemoryStorageThreshold
 }

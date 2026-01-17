@@ -3,11 +3,13 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"sort"
 
 	"github.com/SuperALKALINEdroiD/timelyDB/config"
 	"github.com/SuperALKALINEdroiD/timelyDB/core"
+	"github.com/SuperALKALINEdroiD/timelyDB/utils/common"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/logs"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/nodes"
 )
@@ -62,5 +64,7 @@ func InsertHandler(appConfig *core.App) http.HandlerFunc {
 			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 			return
 		}
+
+		log.Printf("%s : Insert Complete", common.LogPrefix())
 	}
 }

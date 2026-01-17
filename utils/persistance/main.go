@@ -5,6 +5,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"hash/fnv"
+	"math"
 	"os"
 )
 
@@ -12,6 +13,15 @@ type BloomFilter struct {
 	bitset []bool
 	k      int
 	m      int
+}
+
+func BitArraySize(numberOfKeys float64) int {
+	const falsePositiveRate float64 = 0.01
+	m := int(-numberOfKeys * math.Log(falsePositiveRate) / (math.Log(2) * math.Log(2)))
+	if m < 1024 {
+		m = 1024
+	}
+	return m
 }
 
 func NewBloomFilter(m, k int) *BloomFilter {
