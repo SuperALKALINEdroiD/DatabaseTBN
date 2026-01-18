@@ -30,7 +30,7 @@ func (server *internalNode) ManipulateNode(ctx context.Context, request *NodeMan
 	defer server.memTableMux.Unlock()
 
 	if request.Operation == Operation_CREATE {
-		if server.shouldFlushToMemory() {
+		if true || server.shouldFlushToMemory() { // TODO: remove true
 			defer server.flushMemTableToMemory()
 		}
 		server.memTable.Put(request.GetKey(), request.GetValue())

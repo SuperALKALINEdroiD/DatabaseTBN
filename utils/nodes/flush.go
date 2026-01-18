@@ -72,14 +72,17 @@ func (server *internalNode) writeToBloom(kvData map[any]any, path string) error 
 	}
 
 	filerSize := persistance.BitArraySize(float64(len(kvData)))
+	fmt.Println("Filer size", filerSize)
 	bf := persistance.NewBloomFilter(filerSize, 7)
 
 	for key := range kvData {
+		fmt.Println("Key", key)
 		if keyStr, ok := key.(string); ok {
 			bf.Add(keyStr)
 		}
+		fmt.Println("Added key", key)
 	}
-
+	fmt.Println("Saving bloom filter", path)
 	return bf.Save(path)
 }
 
@@ -90,14 +93,11 @@ func (server *internalNode) writeToSSt(kvData map[any]any, path string) error {
 	}
 	defer file.Close()
 
-	// Write number of entries first (8 bytes for uint64)
 	numEntries := uint64(len(kvData))
 	if err := binary.Write(file, binary.LittleEndian, numEntries); err != nil {
 		return fmt.Errorf("failed to write entry count: %w", err)
 	}
 
-	// Write each key-value pair
-	// Format: [key_length (4 bytes)][key][value_length (4 bytes)][value]
 	for key, value := range kvData {
 		keyStr, keyOk := key.(string)
 		valueStr, valueOk := value.(string)
@@ -110,7 +110,6 @@ func (server *internalNode) writeToSSt(kvData map[any]any, path string) error {
 		keyBytes := []byte(keyStr)
 		valueBytes := []byte(valueStr)
 
-		// Write key length and key
 		keyLen := uint32(len(keyBytes))
 		if err := binary.Write(file, binary.LittleEndian, keyLen); err != nil {
 			return fmt.Errorf("failed to write key length: %w", err)
@@ -119,7 +118,6 @@ func (server *internalNode) writeToSSt(kvData map[any]any, path string) error {
 			return fmt.Errorf("failed to write key: %w", err)
 		}
 
-		// Write value length and value
 		valueLen := uint32(len(valueBytes))
 		if err := binary.Write(file, binary.LittleEndian, valueLen); err != nil {
 			return fmt.Errorf("failed to write value length: %w", err)
@@ -129,7 +127,6 @@ func (server *internalNode) writeToSSt(kvData map[any]any, path string) error {
 		}
 	}
 
-	// Sync to ensure data is written to disk
 	if err := file.Sync(); err != nil {
 		return fmt.Errorf("failed to sync SST file: %w", err)
 	}

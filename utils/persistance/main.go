@@ -10,25 +10,22 @@ import (
 )
 
 type BloomFilter struct {
-	bitset []bool
-	k      int
-	m      int
+	Bitset []bool
+	K      int
+	M      int
 }
 
 func BitArraySize(numberOfKeys float64) int {
 	const falsePositiveRate float64 = 0.01
-	m := int(-numberOfKeys * math.Log(falsePositiveRate) / (math.Log(2) * math.Log(2)))
-	if m < 1024 {
-		m = 1024
-	}
-	return m
+	m := math.Max(1024.0, -numberOfKeys*math.Log(falsePositiveRate)/(math.Log(2)*math.Log(2)))
+	return int(m)
 }
 
 func NewBloomFilter(m, k int) *BloomFilter {
 	return &BloomFilter{
-		bitset: make([]bool, m),
-		k:      k,
-		m:      m,
+		Bitset: make([]bool, m),
+		K:      k,
+		M:      m,
 	}
 }
 
@@ -39,16 +36,16 @@ func hashStringWithSeed(s string, seed int) int {
 }
 
 func (bf *BloomFilter) Add(key string) {
-	for i := 0; i < bf.k; i++ {
-		index := hashStringWithSeed(key, i) % bf.m
-		bf.bitset[index] = true
+	for i := 0; i < bf.K; i++ {
+		index := hashStringWithSeed(key, i) % bf.M
+		bf.Bitset[index] = true
 	}
 }
 
 func (bf *BloomFilter) MightContain(key string) bool {
-	for i := 0; i < bf.k; i++ {
-		index := hashStringWithSeed(key, i) % bf.m
-		if !bf.bitset[index] {
+	for i := 0; i < bf.K; i++ {
+		index := hashStringWithSeed(key, i) % bf.M
+		if !bf.Bitset[index] {
 			return false
 		}
 	}

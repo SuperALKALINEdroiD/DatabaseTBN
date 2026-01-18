@@ -8,8 +8,9 @@ type Storage interface {
 type WAL interface {
 	Storage
 	WriteLog(data []byte) error // write WAL logs
-	ReadLog(startLine, endLine int) ([]string, error)
+	ReadLog(lineNumber ...int) ([]string, error)
 	GetPath() string
+	GetTotalLines() (int, error)
 	// Reconstruct(offset int64) error // reconstruct the data from WAL
 }
 

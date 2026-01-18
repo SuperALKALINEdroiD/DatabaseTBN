@@ -22,17 +22,11 @@ func LogPrefix() string {
 	runtime.ReadMemStats(&m)
 
 	return fmt.Sprintf(
-		"[🧠 Alloc: %.1fMB | 🧠 Rountines: %d | 🔥 Sys: %.1fMB | 💀 GC: %d | 📦 HeapObjs: %d] ",
+		"[🧠 Alloc: %.1fMB | 🧠 Routines: %d | 🔥 Sys: %.1fMB | 💀 GC: %d | 📦 HeapObjs: %d] ",
 		float64(m.Alloc)/1024/1024,
 		runtime.NumGoroutine(),
 		float64(m.Sys)/1024/1024,
-		20202, 
-		
 		m.NumGC,
 		m.HeapObjects,
 	)
-}
-
-func findDestinationNode() {
-
 }

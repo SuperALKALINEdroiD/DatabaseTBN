@@ -3,13 +3,11 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"net/http"
 	"sort"
 
 	"github.com/SuperALKALINEdroiD/timelyDB/config"
 	"github.com/SuperALKALINEdroiD/timelyDB/core"
-	"github.com/SuperALKALINEdroiD/timelyDB/utils/common"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/logs"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/nodes"
 )
@@ -32,39 +30,44 @@ func InsertHandler(appConfig *core.App) http.HandlerFunc {
 
 		value := r.URL.Query().Get("value")
 
-		grpcNode, hashError := appConfig.NodeHashInfo.GetNode(key)
-
-		if hashError != nil {
-			panic("Unable to get a node to store data")
+		response := InsertPair(appConfig, key, value)
+		if response != nil {
+			w.WriteHeader(http.StatusOK)
+			err := json.NewEncoder(w).Encode(response)
+			if err != nil {
+				http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+				return
+			}
 		}
-
-		logs.AddWalEntry(appConfig.WAL, key, value, grpcNode)
-
-		destinationNodeIndex := sort.Search(len(appConfig.Nodes), func(i int) bool { return appConfig.Nodes[i].ID == grpcNode }) % len(appConfig.Nodes)
-
-		grpcClient, connection := nodes.StartGRPCClient(appConfig.Nodes[destinationNodeIndex].Address)
-		defer connection.Close()
-
-		insertionPayload := &nodes.NodeManipulationRequest{
-			Node:      appConfig.Nodes[destinationNodeIndex].Address,
-			Key:       key,
-			Value:     value,
-			Operation: nodes.Operation_CREATE,
-		}
-
-		response, error := grpcClient.ManipulateNode(context.Background(), insertionPayload)
-
-		if error != nil {
-			panic(error)
-		}
-
-		w.WriteHeader(http.StatusOK)
-		err := json.NewEncoder(w).Encode(response)
-		if err != nil {
-			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
-			return
-		}
-
-		log.Printf("%s : Insert Complete", common.LogPrefix())
 	}
+}
+
+func InsertPair(appConfig *core.App, key string, value string) *nodes.NodeResponse {
+	grpcNode, hashError := appConfig.NodeHashInfo.GetNode(key)
+
+	if hashError != nil {
+		panic("Unable to get a node to store data")
+	}
+
+	logs.AddWalEntry(appConfig.WAL, key, value, grpcNode)
+
+	destinationNodeIndex := sort.Search(len(appConfig.Nodes), func(i int) bool { return appConfig.Nodes[i].ID == grpcNode }) % len(appConfig.Nodes)
+
+	grpcClient, connection := nodes.StartGRPCClient(appConfig.Nodes[destinationNodeIndex].Address)
+	defer connection.Close()
+
+	insertionPayload := &nodes.NodeManipulationRequest{
+		Node:      appConfig.Nodes[destinationNodeIndex].Address,
+		Key:       key,
+		Value:     value,
+		Operation: nodes.Operation_CREATE,
+	}
+
+	response, error := grpcClient.ManipulateNode(context.Background(), insertionPayload)
+
+	if error != nil {
+		panic(error)
+	}
+
+	return response
 }
