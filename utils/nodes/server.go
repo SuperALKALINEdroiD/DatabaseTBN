@@ -2,7 +2,6 @@ package nodes
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -51,9 +50,22 @@ func (server *internalNode) SearchNode(ctx context.Context, request *NodeSearchR
 
 	searhResult, found := server.memTable.Get(request.Key)
 
-	fmt.Println("SearchResult", searhResult)
-
 	if !found {
+		diskValue, diskFound, err := server.lookupFromDisk(request.Key)
+		if err != nil {
+			log.Printf("disk lookup failed for key %s: %v", request.Key, err)
+		}
+		if diskFound {
+			return &NodeResponse{
+				Status:       Status_OK,
+				Timestamp:    time.Now().String(),
+				Node:         request.Node,
+				Key:          request.Key,
+				Value:        diskValue,
+				ErrorMessage: "",
+			}, nil
+		}
+
 		return &NodeResponse{
 			Status:       Status_NOT_FOUND,
 			Timestamp:    time.Now().String(),
