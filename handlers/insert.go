@@ -3,8 +3,8 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
-	"sort"
 
 	"github.com/SuperALKALINEdroiD/timelyDB/config"
 	"github.com/SuperALKALINEdroiD/timelyDB/core"
@@ -30,44 +30,48 @@ func InsertHandler(appConfig *core.App) http.HandlerFunc {
 
 		value := r.URL.Query().Get("value")
 
-		response := InsertPair(appConfig, key, value)
-		if response != nil {
-			w.WriteHeader(http.StatusOK)
-			err := json.NewEncoder(w).Encode(response)
-			if err != nil {
-				http.Error(w, "Failed to encode response", http.StatusInternalServerError)
-				return
-			}
+		response, err := InsertPair(appConfig, key, value)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		if encodeErr := json.NewEncoder(w).Encode(response); encodeErr != nil {
+			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		}
 	}
 }
 
-func InsertPair(appConfig *core.App, key string, value string) *nodes.NodeResponse {
-	grpcNode, hashError := appConfig.NodeHashInfo.GetNode(key)
-
+func InsertPair(appConfig *core.App, key string, value string) (*nodes.NodeResponse, error) {
+	grpcNodeID, hashError := appConfig.NodeHashInfo.GetNode(key)
 	if hashError != nil {
-		panic("Unable to get a node to store data")
+		return nil, fmt.Errorf("unable to locate node for key %q: %w", key, hashError)
 	}
 
-	logs.AddWalEntry(appConfig.WAL, key, value, grpcNode)
+	logs.AddWalEntry(appConfig.WAL, key, value, grpcNodeID)
 
-	destinationNodeIndex := sort.Search(len(appConfig.Nodes), func(i int) bool { return appConfig.Nodes[i].ID == grpcNode }) % len(appConfig.Nodes)
+	destNode, ok := appConfig.NodeByID[grpcNodeID]
+	if !ok {
+		return nil, fmt.Errorf("node %q not found", grpcNodeID)
+	}
 
-	grpcClient, connection := nodes.StartGRPCClient(appConfig.Nodes[destinationNodeIndex].Address)
-	defer connection.Close()
+	grpcClient, ok := appConfig.NodeClients[grpcNodeID]
+	if !ok {
+		return nil, fmt.Errorf("no gRPC client for node %q", grpcNodeID)
+	}
 
 	insertionPayload := &nodes.NodeManipulationRequest{
-		Node:      appConfig.Nodes[destinationNodeIndex].Address,
+		Node:      destNode.Address,
 		Key:       key,
 		Value:     value,
 		Operation: nodes.Operation_CREATE,
 	}
 
-	response, error := grpcClient.ManipulateNode(context.Background(), insertionPayload)
-
-	if error != nil {
-		panic(error)
+	response, err := grpcClient.ManipulateNode(context.Background(), insertionPayload)
+	if err != nil {
+		return nil, fmt.Errorf("gRPC insert failed for node %q: %w", grpcNodeID, err)
 	}
 
-	return response
+	return response, nil
 }

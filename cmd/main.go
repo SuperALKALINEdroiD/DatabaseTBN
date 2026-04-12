@@ -16,6 +16,8 @@ import (
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/logs"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/nodes"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/storage"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func main() {
@@ -47,9 +49,25 @@ func main() {
 	appPath := common.GetAppPath()
 	wal.Connect(filepath.Join(appPath, config.MetaDataConfig.WALName))
 
+	nodeByID := make(map[string]*nodes.Node, len(grpcNodes))
+	nodeClients := make(map[string]nodes.NodeServiceClient, len(grpcNodes))
+	for _, n := range grpcNodes {
+		if n == nil {
+			continue
+		}
+		nodeByID[n.ID] = n
+		conn, connErr := grpc.NewClient(n.Address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if connErr != nil {
+			log.Fatalf("failed to create gRPC client for node %s: %v", n.ID, connErr)
+		}
+		nodeClients[n.ID] = nodes.NewNodeServiceClient(conn)
+	}
+
 	app := &core.App{
 		Config:       config,
 		Nodes:        grpcNodes,
+		NodeByID:     nodeByID,
+		NodeClients:  nodeClients,
 		NodeHashInfo: nodeHashInfo,
 		WAL:          wal,
 	}
