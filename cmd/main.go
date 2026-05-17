@@ -78,7 +78,7 @@ func main() {
 
 	serverAddress := fmt.Sprintf(":%d", app.Config.Port)
 	log.Printf("Starting %s server on %s", config.StoreName, serverAddress)
-	server := &http.Server{Addr: ":7001", Handler: router}
+	server := &http.Server{Addr: serverAddress, Handler: router}
 
 	go func() {
 		log.Printf("Starting to listen on %s", serverAddress)
