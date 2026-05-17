@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/storage"
@@ -40,11 +41,25 @@ func AddWalEntry(wal storage.WAL, key string, value string, nodeId string) {
 		panic("Failed to serialize the log entry")
 	}
 
-	logData = append(logData, '\n')
-
 	if err := wal.WriteLog(logData); err != nil {
 		panic("Failed to write to write-ahead logs")
 	}
 
 	log.Printf("ADDED: %s :: %s to Write Ahead Logs", key, value)
+}
+
+func ParseWalEntry(walEntry string) (string, string, string, error) {
+	var entry WriteAheadEntry
+	err := json.Unmarshal([]byte(walEntry), &entry)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to unmarshal WAL entry: %w", err)
+	}
+
+	dataStr := string(entry.Data)
+	parts := strings.Split(dataStr, ":::")
+	if len(parts) != 2 {
+		return "", "", "", fmt.Errorf("invalid data format in WAL entry: expected 'key:::%value'")
+	}
+
+	return parts[0], parts[1], entry.NodeID, nil
 }

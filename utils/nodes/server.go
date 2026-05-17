@@ -1,27 +1,39 @@
 package nodes
 
 import (
-	context "context"
+	"context"
 	"log"
+	"sync"
 	"time"
+	"unsafe"
 
+	"github.com/SuperALKALINEdroiD/timelyDB/config"
+	"github.com/SuperALKALINEdroiD/timelyDB/utils/common"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/storage"
 	"github.com/emirpasic/gods/trees/redblacktree"
 )
 
 type internalNode struct {
 	UnimplementedNodeServiceServer
-	Storage  storage.KVStore
-	MemTable redblacktree.Tree
+	storage     storage.KVStore
+	memTable    redblacktree.Tree
+	dbConfig    config.DatabaseConfig
+	memTableMux sync.RWMutex
 }
 
 func (server *internalNode) ManipulateNode(ctx context.Context, request *NodeManipulationRequest) (*NodeResponse, error) {
-	log.Printf("Incoming %s request on manipulation procedure at %s", request.Operation, request.Node)
+	prefix := common.LogPrefix()
+	log.Printf("%s :: Incoming %s request on manipulation procedure at %s", prefix, request.Operation, request.Node)
+
+	server.memTableMux.Lock()
+	defer server.memTableMux.Unlock()
 
 	if request.Operation == Operation_CREATE {
-		server.MemTable.Put(request.GetKey(), request)
+		if true || server.shouldFlushToMemory() { // TODO: remove true
+			defer server.flushMemTableToMemory()
+		}
+		server.memTable.Put(request.GetKey(), request.GetValue())
 		log.Printf("Inserted using manipulation procedure at %s", request.Node)
-		// how to put the data on disk??
 	}
 
 	return &NodeResponse{
@@ -35,12 +47,41 @@ func (server *internalNode) ManipulateNode(ctx context.Context, request *NodeMan
 }
 
 func (server *internalNode) SearchNode(ctx context.Context, request *NodeSearchRequest) (*NodeResponse, error) {
+
+	searhResult, found := server.memTable.Get(request.Key)
+
+	if !found {
+		diskValue, diskFound, err := server.lookupFromDisk(request.Key)
+		if err != nil {
+			log.Printf("disk lookup failed for key %s: %v", request.Key, err)
+		}
+		if diskFound {
+			return &NodeResponse{
+				Status:       Status_OK,
+				Timestamp:    time.Now().String(),
+				Node:         request.Node,
+				Key:          request.Key,
+				Value:        diskValue,
+				ErrorMessage: "",
+			}, nil
+		}
+
+		return &NodeResponse{
+			Status:       Status_NOT_FOUND,
+			Timestamp:    time.Now().String(),
+			Node:         request.Node,
+			Key:          request.Key,
+			Value:        "",
+			ErrorMessage: "Not Found",
+		}, nil
+	}
+
 	return &NodeResponse{
 		Status:       Status_OK,
 		Timestamp:    time.Now().String(),
 		Node:         request.Node,
 		Key:          request.Key,
-		Value:        "DummyValue", // Dummy response
+		Value:        searhResult.(string),
 		ErrorMessage: "",
 	}, nil
 }
@@ -81,6 +122,7 @@ func (server *internalNode) BatchSearch(ctx context.Context, request *NodeBatchR
 func (server *internalNode) BatchManipulate(ctx context.Context, request *NodeBatchRequest) (*NodeBatchResponse, error) {
 	responses := []*NodeResponse{}
 	for _, node := range request.Searches {
+
 		responses = append(responses, &NodeResponse{
 			Status:       Status_OK,
 			Timestamp:    time.Now().String(),
@@ -112,4 +154,35 @@ func (server *internalNode) StreamNodeUpdates(stream NodeService_StreamNodeUpdat
 			return err
 		}
 	}
+}
+
+func (server *internalNode) shouldFlushToMemory() bool {
+	nodeCount := server.memTable.Size()
+	if nodeCount == 0 {
+		return false
+	}
+
+	var sampleNode redblacktree.Node
+	nodeOverhead := int64(unsafe.Sizeof(sampleNode))
+
+	keys := server.memTable.Keys()
+	totalDataSize := int64(0)
+
+	for _, key := range keys {
+		if keyStr, ok := key.(string); ok {
+			totalDataSize += int64(len(keyStr))
+		}
+
+		// Size of value string
+		if value, ok := server.memTable.Get(key); ok {
+			if valueStr, ok := value.(string); ok {
+				totalDataSize += int64(len(valueStr))
+			}
+		}
+	}
+
+	const stringHeaderSize = 16 //
+	totalSize := (int64(nodeCount) * nodeOverhead) + totalDataSize + (int64(nodeCount) * 2 * stringHeaderSize)
+
+	return totalSize > server.dbConfig.InMemoryStorageThreshold
 }

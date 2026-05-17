@@ -1,24 +1,29 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/SuperALKALINEdroiD/timelyDB/manifest"
+)
 
 type StoreMode string
 
 type DatabaseConfig struct {
-	StoreName                string         `json:"dbName"`
-	Port                     int            `json:"port"`
-	IsLockEnabled            bool           `json:"isLockEnabled"`
-	TimelyConfig             TimelyConfig   `json:"timelyConfig"`
-	Nodes                    []NodeConfig   `json:"nodes"`
-	NodeCount                int            `json:"nodeCount"`
-	Mode                     StoreMode      `json:"mode"`
-	InMemoryStorageThreshold int64          `json:"inMemoryStorageThreshold"`
-	MetaDataConfig           MetaDataConfig `json:"metaDataConfig"`
+	StoreName                string            `json:"dbName" validate:"required"`
+	Port                     int               `json:"port" validate:"required,gt=0"`
+	IsLockEnabled            bool              `json:"isLockEnabled"`
+	TimelyConfig             TimelyConfig      `json:"timelyConfig"`
+	Nodes                    []NodeConfig      `json:"nodes" validate:"required"`
+	NodeCount                int               `json:"nodeCount" validate:"required,gt=0"`
+	Mode                     StoreMode         `json:"mode" validate:"required"`
+	InMemoryStorageThreshold int64             `json:"inMemoryStorageThreshold" validate:"required,gt=0"`
+	MetaDataConfig           MetaDataConfig    `json:"metaDataConfig" validate:"required"`
+	Manifest                 manifest.Manifest `validate:"omitempty"`
 }
 
 type MetaDataConfig struct {
 	State   NodeState `json:"state"`
-	WALPath string    `json:"walPath"`
+	WALName string    `json:"walPath"`
 }
 
 type NodeState int
@@ -62,10 +67,10 @@ func GenerateExampleConfig(nodeCount int, host string) DatabaseConfig {
 		Mode:                     KV,
 		Nodes:                    nodes,
 		NodeCount:                nodeCount,
-		InMemoryStorageThreshold: 2000,
+		InMemoryStorageThreshold: 2024, // 2MB
 		MetaDataConfig: MetaDataConfig{
 			State:   NodeStateReady,
-			WALPath: "/var/lib/db/wal",
+			WALName: "wal-storage",
 		},
 	}
 }

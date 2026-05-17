@@ -68,11 +68,46 @@ func (localWAL *LocalWAL) GetSize() (int, error) {
 	return int(fileInfo.Size()), nil
 }
 
-func (localWAL *LocalWAL) ReadLog(startLine, endLine int) ([]string, error) {
+func (localWAL *LocalWAL) GetTotalLines() (int, error) {
+	file, err := os.Open(localWAL.path)
+	if err != nil {
+		return 0, err
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	lineCount := 0
+	for scanner.Scan() {
+		lineCount++
+	}
+	return lineCount, nil
+}
+
+func (localWAL *LocalWAL) ReadLog(lineNumber ...int) ([]string, error) {
 	localWAL.mutex.Lock()
 	defer localWAL.mutex.Unlock()
 
-	if startLine < 0 || endLine <= startLine {
+	var startLine, endLine int
+	var err error
+
+	if len(lineNumber) == 0 {
+		startLine = 0
+		endLine, err = localWAL.GetTotalLines()
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(lineNumber) == 1 {
+		startLine = lineNumber[0]
+		endLine, err = localWAL.GetTotalLines()
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(lineNumber) == 2 {
+		startLine = lineNumber[0]
+		endLine = lineNumber[1]
+	}
+	if len(lineNumber) > 2 {
 		return nil, errors.New("invalid line range")
 	}
 
@@ -112,6 +147,7 @@ type LocalKVStore struct {
 }
 
 func (localKVStore *LocalKVStore) Connect(path string) error {
+
 	return nil
 }
 
@@ -132,6 +168,10 @@ func (localKVStore *LocalKVStore) Get(key string) (value []byte, error error) {
 }
 
 func (localKVStore *LocalKVStore) Delete(key string) error {
+	return nil
+}
+
+func (LocalKVStore *LocalKVStore) Compaction() error {
 	return nil
 }
 

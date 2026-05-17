@@ -7,14 +7,17 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"runtime/pprof"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/SuperALKALINEdroiD/timelyDB/core"
+	"github.com/SuperALKALINEdroiD/timelyDB/utils/common"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/logs"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/nodes"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/storage"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func main() {
@@ -24,10 +27,6 @@ func main() {
 	}
 	defer f.Close()
 
-	if err := pprof.StartCPUProfile(f); err != nil {
-		panic(err)
-	}
-	defer pprof.StopCPUProfile()
 	ctx, cancel := context.WithCancel(context.Background())
 
 	signalChannel := make(chan os.Signal, 1)
@@ -47,11 +46,28 @@ func main() {
 
 	grpcNodes, nodeHashInfo := nodes.LoadServers(ctx, config)
 	wal := &storage.LocalWAL{}
-	wal.Connect("wal-storage")
+	appPath := common.GetAppPath()
+	wal.Connect(filepath.Join(appPath, config.MetaDataConfig.WALName))
+
+	nodeByID := make(map[string]*nodes.Node, len(grpcNodes))
+	nodeClients := make(map[string]nodes.NodeServiceClient, len(grpcNodes))
+	for _, n := range grpcNodes {
+		if n == nil {
+			continue
+		}
+		nodeByID[n.ID] = n
+		conn, connErr := grpc.NewClient(n.Address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if connErr != nil {
+			log.Fatalf("failed to create gRPC client for node %s: %v", n.ID, connErr)
+		}
+		nodeClients[n.ID] = nodes.NewNodeServiceClient(conn)
+	}
 
 	app := &core.App{
 		Config:       config,
 		Nodes:        grpcNodes,
+		NodeByID:     nodeByID,
+		NodeClients:  nodeClients,
 		NodeHashInfo: nodeHashInfo,
 		WAL:          wal,
 	}
@@ -61,8 +77,8 @@ func main() {
 	router := initRouter(app)
 
 	serverAddress := fmt.Sprintf(":%d", app.Config.Port)
-	log.Printf("Starting server on %s", serverAddress)
-	server := &http.Server{Addr: ":7001", Handler: router}
+	log.Printf("Starting %s server on %s", config.StoreName, serverAddress)
+	server := &http.Server{Addr: serverAddress, Handler: router}
 
 	go func() {
 		log.Printf("Starting to listen on %s", serverAddress)

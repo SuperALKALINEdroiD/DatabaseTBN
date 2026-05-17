@@ -13,6 +13,8 @@ type App struct {
 	Config       *config.DatabaseConfig
 	Router       *chi.Mux
 	Nodes        []*nodes.Node
+	NodeByID     map[string]*nodes.Node
+	NodeClients  map[string]nodes.NodeServiceClient
 	NodeHashInfo hashing.NodeHash
 	WAL          storage.WAL
 }

@@ -1,0 +1,24 @@
+{
+	 "dbName": "example_store",
+	 "port": 7001,
+	 "isLockEnabled": true,
+	 "timelyConfig": {
+	 	 "isEnabled": true,
+	 	 "type": 72
+	 },
+	 "nodes": [
+	 	 {
+	 	 	 "endpoint": ":50051"
+	 	 },
+	 	 {
+	 	 	 "endpoint": ":50052"
+	 	 }
+	 ],
+	 "nodeCount": 2,
+	 "mode": "KV",
+	 "inMemoryStorageThreshold": 2000,
+	 "metaDataConfig": {
+	 	 "state": 1,
+	 	 "walPath": "wal-storage"
+	 }
+}

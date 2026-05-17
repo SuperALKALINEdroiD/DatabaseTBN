@@ -9,21 +9,27 @@ import (
 	"github.com/SuperALKALINEdroiD/timelyDB/config"
 	"github.com/SuperALKALINEdroiD/timelyDB/core"
 	"github.com/SuperALKALINEdroiD/timelyDB/handlers"
+	"github.com/SuperALKALINEdroiD/timelyDB/utils/common"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
 )
 
 func initEnvironment() (*config.DatabaseConfig, error) {
-	var configPath = os.Getenv("CONFIG_PATH")
-
-	fmt.Println(configPath)
+	var configPath = os.Getenv("LOG_BASE_SETTINGS")
 
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		log.Printf("Error loading configuration: %v", err)
 		return nil, err
 	}
+
 	return cfg, nil
+}
+
+func GetAppPath() string {
+	path := common.GetAppPath()
+
+	return path
 }
 
 func initRouter(app *core.App) *chi.Mux {
@@ -53,6 +59,8 @@ func initRoutes(router *chi.Mux, app *core.App) {
 		})
 
 		r.Post("/insert", handlers.InsertHandler(app))
+
+		r.Get("/", handlers.GetValue(app))
 
 		r.Post("/update", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)

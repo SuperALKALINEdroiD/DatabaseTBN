@@ -28,7 +28,7 @@ func nodeSetupTask(ctx context.Context, nodeID string, port string, config *conf
 
 	grpcServer := grpc.NewServer()
 	nodeStorage := storage.LocalKVStore{} // TODO: based on config
-	dataStoreServer := &internalNode{Storage: &nodeStorage, MemTable: *redblacktree.NewWithStringComparator()}
+	dataStoreServer := &internalNode{storage: &nodeStorage, memTable: *redblacktree.NewWithStringComparator(), dbConfig: *config}
 	RegisterNodeServiceServer(grpcServer, dataStoreServer)
 
 	stop := make(chan struct{})
@@ -82,13 +82,12 @@ func LoadServers(ctx context.Context, config *config.DatabaseConfig) ([]*Node, h
 }
 
 func StartGRPCClient(destNodeAddr string) (NodeServiceClient, *grpc.ClientConn) {
-	formattedAddress := fmt.Sprintf("localhost%s", destNodeAddr)
-	conn, err := grpc.NewClient(formattedAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(destNodeAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	log.Println("gRPC client started for node running at", formattedAddress)
+	log.Println("gRPC client started for node running at", destNodeAddr)
 	client := NewNodeServiceClient(conn)
 
 	return client, conn
