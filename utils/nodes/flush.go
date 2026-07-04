@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/SuperALKALINEdroiD/timelyDB/manifest"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/persistance"
 )
 
@@ -41,86 +42,91 @@ func (server *internalNode) flushMemTableToMemory() {
 }
 
 func (server *internalNode) atomicFlushToDisk(kvData map[any]any) error {
-	// TODO: Implement manifest handling: not sure yet how to handle it
-	manifest := server.dbConfig.Manifest
-	if len(manifest.SSTables) == 0 {
+	m := &server.dbConfig.Manifest
+	if len(m.SSTables) == 0 {
 		return fmt.Errorf("no SSTable paths configured in manifest")
 	}
 
-	basePath := manifest.SSTables[0].Path // temporary
-
-	// Ensure the directory exists
+	basePath := m.SSTables[0].Path
 	if err := os.MkdirAll(basePath, 0755); err != nil {
 		return fmt.Errorf("failed to create SSTable directory: %w", err)
 	}
 
-	sstableFile := manifest.SSTables[0].FileName
-	if sstableFile == "" {
-		sstableFile = "kv.sst"
-	}
-	bloomFile := manifest.SSTables[0].BloomFile
-	if bloomFile == "" {
-		bloomFile = "filter.bf"
-	}
-
-	tmpSST := filepath.Join(basePath, "kv.tmp.sst")
-	tmpBloom := filepath.Join(basePath, "filter.tmp.bf")
-	finalSST := filepath.Join(basePath, sstableFile)
-	finalBloom := filepath.Join(basePath, bloomFile)
-
-	mergedKV, err := mergeExistingAndIncomingKV(finalSST, kvData)
-	if err != nil {
-		return fmt.Errorf("failed to merge incoming data with existing SSTable: %w", err)
-	}
-
-	pairs := normalizeAndSortPairs(mergedKV)
+	pairs := normalizeAndSortPairs(kvData)
 	if len(pairs) == 0 {
 		return fmt.Errorf("no serializable key-value pairs to flush")
 	}
 
+	// Assign the next segment ID
+	m.NextSegmentID++
+	segID := m.NextSegmentID
+	sstFile := fmt.Sprintf("seg_%08d.sst", segID)
+	bloomFile := fmt.Sprintf("seg_%08d.bf", segID)
+	tmpSST := filepath.Join(basePath, fmt.Sprintf("seg_%08d.tmp.sst", segID))
+	tmpBloom := filepath.Join(basePath, fmt.Sprintf("seg_%08d.tmp.bf", segID))
+	finalSST := filepath.Join(basePath, sstFile)
+	finalBloom := filepath.Join(basePath, bloomFile)
+
 	if err := server.writeToSSt(pairs, tmpSST); err != nil {
+		m.NextSegmentID-- // roll back on failure
 		return fmt.Errorf("SST write failed: %w", err)
 	}
 
 	if err := server.writeToBloom(pairs, tmpBloom); err != nil {
+		m.NextSegmentID--
 		os.Remove(tmpSST)
-		return fmt.Errorf("BLOOM WRITE FAILED: %w", err)
+		return fmt.Errorf("bloom write failed: %w", err)
 	}
 
 	if err := os.Rename(tmpSST, finalSST); err != nil {
+		m.NextSegmentID--
 		os.Remove(tmpSST)
 		os.Remove(tmpBloom)
 		return fmt.Errorf("SST rename failed: %w", err)
 	}
 	if err := os.Rename(tmpBloom, finalBloom); err != nil {
+		m.NextSegmentID--
 		os.Remove(finalSST)
 		return fmt.Errorf("bloom filter rename failed: %w", err)
 	}
 
-	if err := validatePersistedArtifacts(finalSST, finalBloom, pairs); err != nil {
-		return fmt.Errorf("persisted file validation failed: %w", err)
+	// Register the new segment in the manifest
+	m.SSTables = append(m.SSTables, manifest.SSTableMetadata{
+		Path:      basePath,
+		FileName:  sstFile,
+		BloomFile: bloomFile,
+		SegmentID: segID,
+	})
+
+	// Save WAL checkpoint: record line count so replay skips these entries on next startup
+	if server.wal != nil {
+		if err := server.wal.Flush(); err != nil {
+			log.Printf("Warning: WAL flush before checkpoint failed: %v", err)
+		} else if lineCount, err := server.wal.GetTotalLines(); err == nil {
+			if m.NodeCheckpoints == nil {
+				m.NodeCheckpoints = make(map[string]uint64)
+			}
+			m.NodeCheckpoints[server.nodeID] = uint64(lineCount)
+		}
 	}
 
-	log.Printf("Successfully flushed %d entries to SSTable at %s", len(kvData), finalSST)
+	if err := manifest.SaveManifest(m); err != nil {
+		log.Printf("Warning: failed to save manifest after flush: %v", err)
+	}
+
+	log.Printf("Successfully flushed %d entries to segment %d at %s", len(pairs), segID, finalSST)
+
+	server.compactSSTables()
+
 	return nil
 }
 
-func mergeExistingAndIncomingKV(sstablePath string, incoming map[any]any) (map[any]any, error) {
-	merged := make(map[any]any)
-
-	existingPairs, err := readSSTable(sstablePath)
-	if err != nil {
-		return nil, err
+// TODO: implement full compaction — merge segments into one sorted file, deduplicate keys, remove old files.
+func (server *internalNode) compactSSTables() {
+	const compactionThreshold = 10
+	if len(server.dbConfig.Manifest.SSTables) > compactionThreshold {
+		log.Printf("Compaction threshold (%d segments) reached — compaction not yet implemented", compactionThreshold)
 	}
-	for _, pair := range existingPairs {
-		merged[pair.key] = pair.value
-	}
-
-	for key, value := range incoming {
-		merged[key] = value
-	}
-
-	return merged, nil
 }
 
 func normalizeAndSortPairs(kvData map[any]any) []kvPair {
@@ -146,7 +152,6 @@ func (server *internalNode) writeToBloom(pairs []kvPair, path string) error {
 		return nil
 	}
 
-	// Ensure parent directory exists
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory for bloom filter: %w", err)
@@ -155,7 +160,6 @@ func (server *internalNode) writeToBloom(pairs []kvPair, path string) error {
 	filerSize := persistance.BitArraySize(float64(len(pairs)))
 	bf := persistance.NewBloomFilter(filerSize, 7)
 
-	// Add all keys to bloom filter
 	for _, pair := range pairs {
 		bf.Add(pair.key)
 	}
@@ -174,7 +178,6 @@ func (server *internalNode) writeToSSt(pairs []kvPair, path string) error {
 		return nil
 	}
 
-	// Ensure parent directory exists
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory for SST file: %w", err)
@@ -186,18 +189,15 @@ func (server *internalNode) writeToSSt(pairs []kvPair, path string) error {
 	}
 	defer file.Close()
 
-	// Write number of entries
 	numEntries := uint64(len(pairs))
 	if err := binary.Write(file, binary.LittleEndian, numEntries); err != nil {
 		return fmt.Errorf("failed to write entry count: %w", err)
 	}
 
-	// Write each key-value pair in sorted order
 	for _, pair := range pairs {
 		keyBytes := []byte(pair.key)
 		valueBytes := []byte(pair.value)
 
-		// Write key length and key
 		keyLen := uint32(len(keyBytes))
 		if err := binary.Write(file, binary.LittleEndian, keyLen); err != nil {
 			return fmt.Errorf("failed to write key length: %w", err)
@@ -206,7 +206,6 @@ func (server *internalNode) writeToSSt(pairs []kvPair, path string) error {
 			return fmt.Errorf("failed to write key: %w", err)
 		}
 
-		// Write value length and value
 		valueLen := uint32(len(valueBytes))
 		if err := binary.Write(file, binary.LittleEndian, valueLen); err != nil {
 			return fmt.Errorf("failed to write value length: %w", err)
@@ -216,7 +215,6 @@ func (server *internalNode) writeToSSt(pairs []kvPair, path string) error {
 		}
 	}
 
-	// Sync to ensure data is written to disk
 	if err := file.Sync(); err != nil {
 		return fmt.Errorf("failed to sync SST file: %w", err)
 	}
@@ -279,78 +277,40 @@ func readSSTable(path string) ([]kvPair, error) {
 	return pairs, nil
 }
 
-func validatePersistedArtifacts(sstablePath string, bloomPath string, expected []kvPair) error {
-	storedPairs, err := readSSTable(sstablePath)
-	if err != nil {
-		return err
-	}
-	if len(storedPairs) != len(expected) {
-		return fmt.Errorf("SSTable validation mismatch: expected %d entries, got %d", len(expected), len(storedPairs))
-	}
-
-	for i := range expected {
-		if expected[i].key != storedPairs[i].key || expected[i].value != storedPairs[i].value {
-			return fmt.Errorf("SSTable validation mismatch at index %d", i)
-		}
-	}
-
-	bf, err := persistance.LoadBloomFilter(bloomPath)
-	if err != nil {
-		return err
-	}
-	if bf == nil {
-		return fmt.Errorf("bloom filter missing or empty at %s", bloomPath)
-	}
-
-	for _, pair := range expected {
-		if !bf.MightContain(pair.key) {
-			return fmt.Errorf("bloom filter missing persisted key: %s", pair.key)
-		}
-	}
-
-	return nil
-}
-
+// lookupFromDisk searches all segments newest-first (most recent write wins).
 func (server *internalNode) lookupFromDisk(key string) (string, bool, error) {
-	manifest := server.dbConfig.Manifest
-	if len(manifest.SSTables) == 0 {
+	m := server.dbConfig.Manifest
+	if len(m.SSTables) == 0 {
 		return "", false, nil
 	}
 
-	basePath := manifest.SSTables[0].Path
-	sstableFile := manifest.SSTables[0].FileName
-	if sstableFile == "" {
-		sstableFile = "kv.sst"
-	}
-	bloomFile := manifest.SSTables[0].BloomFile
-	if bloomFile == "" {
-		bloomFile = "filter.bf"
-	}
+	for i := len(m.SSTables) - 1; i >= 0; i-- {
+		seg := m.SSTables[i]
+		sstablePath := filepath.Join(seg.Path, seg.FileName)
+		bloomPath := filepath.Join(seg.Path, seg.BloomFile)
 
-	sstablePath := filepath.Join(basePath, sstableFile)
-	bloomPath := filepath.Join(basePath, bloomFile)
+		bf, err := persistance.LoadBloomFilter(bloomPath)
+		if err != nil {
+			log.Printf("Warning: failed to load bloom filter for segment %d: %v", seg.SegmentID, err)
+		}
+		if bf != nil && !bf.MightContain(key) {
+			continue // definitely not in this segment
+		}
 
-	bf, err := persistance.LoadBloomFilter(bloomPath)
-	if err != nil {
-		return "", false, err
-	}
-	if bf != nil && !bf.MightContain(key) {
-		return "", false, nil
-	}
+		pairs, err := readSSTable(sstablePath)
+		if err != nil {
+			return "", false, fmt.Errorf("error reading segment %d: %w", seg.SegmentID, err)
+		}
+		if len(pairs) == 0 {
+			continue
+		}
 
-	pairs, err := readSSTable(sstablePath)
-	if err != nil {
-		return "", false, err
-	}
-	if len(pairs) == 0 {
-		return "", false, nil
-	}
-
-	idx := sort.Search(len(pairs), func(i int) bool {
-		return pairs[i].key >= key
-	})
-	if idx < len(pairs) && pairs[idx].key == key {
-		return pairs[idx].value, true, nil
+		idx := sort.Search(len(pairs), func(j int) bool {
+			return pairs[j].key >= key
+		})
+		if idx < len(pairs) && pairs[idx].key == key {
+			return pairs[idx].value, true, nil
+		}
 	}
 
 	return "", false, nil

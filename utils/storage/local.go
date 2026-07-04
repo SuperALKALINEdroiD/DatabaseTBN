@@ -3,23 +3,47 @@ package storage
 import (
 	"bufio"
 	"errors"
-	"fmt"
 	"log"
 	"os"
 	"sync"
+	"time"
 )
 
 type LocalWAL struct {
-	path  string
-	mutex sync.Mutex
-}
-
-func openLocalStorageFile(path string) (*os.File, error) {
-	return os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
+	path   string
+	file   *os.File
+	writer *bufio.Writer
+	done   chan struct{}
+	mutex  sync.Mutex
 }
 
 func (localWAL *LocalWAL) Connect(path string) error {
 	localWAL.path = path
+
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
+	if err != nil {
+		return err
+	}
+	localWAL.file = file
+	localWAL.writer = bufio.NewWriterSize(file, 64*1024) // 64KB buffer
+	localWAL.done = make(chan struct{})
+
+	go func() {
+		ticker := time.NewTicker(200 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				localWAL.mutex.Lock()
+				_ = localWAL.writer.Flush()
+				_ = localWAL.file.Sync()
+				localWAL.mutex.Unlock()
+			case <-localWAL.done:
+				return
+			}
+		}
+	}()
+
 	return nil
 }
 
@@ -31,37 +55,35 @@ func (localWAL *LocalWAL) WriteLog(data []byte) error {
 	localWAL.mutex.Lock()
 	defer localWAL.mutex.Unlock()
 
-	file, err := openLocalStorageFile(localWAL.path)
-	if err != nil {
-		log.Println("Error opening WAL file:", err)
-		return err
-	}
-	defer file.Close()
-
-	_, err = file.Write(append(data, '\n'))
+	_, err := localWAL.writer.Write(append(data, '\n'))
 	if err != nil {
 		log.Println("Error writing log:", err)
 		return err
 	}
 
-	if err := file.Sync(); err != nil {
-		log.Println("Error syncing file:", err)
-		return err
-	}
-
-	fmt.Printf("Log Added at %s", localWAL.GetPath())
-
 	return nil
 }
 
-func (localWAL *LocalWAL) GetSize() (int, error) {
-	file, err := os.Open(localWAL.path)
-	if err != nil {
-		return 0, err
-	}
-	defer file.Close()
+func (localWAL *LocalWAL) Flush() error {
+	localWAL.mutex.Lock()
+	defer localWAL.mutex.Unlock()
 
-	fileInfo, err := file.Stat()
+	if err := localWAL.writer.Flush(); err != nil {
+		return err
+	}
+	return localWAL.file.Sync()
+}
+
+func (localWAL *LocalWAL) Close() error {
+	close(localWAL.done)
+	if err := localWAL.Flush(); err != nil {
+		return err
+	}
+	return localWAL.file.Close()
+}
+
+func (localWAL *LocalWAL) GetSize() (int, error) {
+	fileInfo, err := localWAL.file.Stat()
 	if err != nil {
 		return 0, err
 	}
@@ -84,7 +106,9 @@ func (localWAL *LocalWAL) GetTotalLines() (int, error) {
 
 func (localWAL *LocalWAL) ReadLog(lineNumber ...int) ([]string, error) {
 	localWAL.mutex.Lock()
-	defer localWAL.mutex.Unlock()
+	// Flush before reading so buffered writes are visible
+	_ = localWAL.writer.Flush()
+	localWAL.mutex.Unlock()
 
 	var startLine, endLine int
 	var err error
@@ -147,7 +171,6 @@ type LocalKVStore struct {
 }
 
 func (localKVStore *LocalKVStore) Connect(path string) error {
-
 	return nil
 }
 

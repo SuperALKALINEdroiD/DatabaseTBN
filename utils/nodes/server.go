@@ -19,6 +19,8 @@ type internalNode struct {
 	memTable    redblacktree.Tree
 	dbConfig    config.DatabaseConfig
 	memTableMux sync.RWMutex
+	nodeID      string
+	wal         storage.WAL
 }
 
 func (server *internalNode) ManipulateNode(ctx context.Context, request *NodeManipulationRequest) (*NodeResponse, error) {
@@ -29,7 +31,7 @@ func (server *internalNode) ManipulateNode(ctx context.Context, request *NodeMan
 	defer server.memTableMux.Unlock()
 
 	if request.Operation == Operation_CREATE {
-		if true || server.shouldFlushToMemory() { // TODO: remove true
+		if server.shouldFlushToMemory() {
 			defer server.flushMemTableToMemory()
 		}
 		server.memTable.Put(request.GetKey(), request.GetValue())

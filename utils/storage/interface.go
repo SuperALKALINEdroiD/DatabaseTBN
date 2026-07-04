@@ -11,7 +11,8 @@ type WAL interface {
 	ReadLog(lineNumber ...int) ([]string, error)
 	GetPath() string
 	GetTotalLines() (int, error)
-	// Reconstruct(offset int64) error // reconstruct the data from WAL
+	Flush() error // flush buffered writes and fsync to disk
+	Close() error // flush, sync, and close the underlying file
 }
 
 type KVStore interface {

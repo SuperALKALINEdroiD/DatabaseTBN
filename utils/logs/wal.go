@@ -58,7 +58,7 @@ func ParseWalEntry(walEntry string) (string, string, string, error) {
 	dataStr := string(entry.Data)
 	parts := strings.Split(dataStr, ":::")
 	if len(parts) != 2 {
-		return "", "", "", fmt.Errorf("invalid data format in WAL entry: expected 'key:::%value'")
+		return "", "", "", fmt.Errorf("invalid data format in WAL entry: expected 'key:::value'")
 	}
 
 	return parts[0], parts[1], entry.NodeID, nil

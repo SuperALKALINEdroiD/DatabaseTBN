@@ -30,7 +30,10 @@ func InsertHandler(appConfig *core.App) http.HandlerFunc {
 
 		value := r.URL.Query().Get("value")
 
-		response, err := InsertPair(appConfig, key, value)
+		rpcCtx, cancel := context.WithTimeout(r.Context(), grpcRequestTimeout)
+		defer cancel()
+
+		response, err := InsertPair(rpcCtx, appConfig, key, value)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -43,7 +46,7 @@ func InsertHandler(appConfig *core.App) http.HandlerFunc {
 	}
 }
 
-func InsertPair(appConfig *core.App, key string, value string) (*nodes.NodeResponse, error) {
+func InsertPair(ctx context.Context, appConfig *core.App, key string, value string) (*nodes.NodeResponse, error) {
 	grpcNodeID, hashError := appConfig.NodeHashInfo.GetNode(key)
 	if hashError != nil {
 		return nil, fmt.Errorf("unable to locate node for key %q: %w", key, hashError)
@@ -68,7 +71,7 @@ func InsertPair(appConfig *core.App, key string, value string) (*nodes.NodeRespo
 		Operation: nodes.Operation_CREATE,
 	}
 
-	response, err := grpcClient.ManipulateNode(context.Background(), insertionPayload)
+	response, err := grpcClient.ManipulateNode(ctx, insertionPayload)
 	if err != nil {
 		return nil, fmt.Errorf("gRPC insert failed for node %q: %w", grpcNodeID, err)
 	}

@@ -3,12 +3,11 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
-	"sort"
 
 	"github.com/SuperALKALINEdroiD/timelyDB/config"
 	"github.com/SuperALKALINEdroiD/timelyDB/core"
-	"github.com/SuperALKALINEdroiD/timelyDB/utils/logs"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/nodes"
 )
 
@@ -28,34 +27,41 @@ func GetValue(appConfig *core.App) http.HandlerFunc {
 			return
 		}
 
-		value := r.URL.Query().Get("value")
-
 		grpcNode, hashError := appConfig.NodeHashInfo.GetNode(key)
 
 		if hashError != nil {
-			panic("Unable to get a node to store data")
+			http.Error(w, fmt.Sprintf("unable to locate node for key %q", key), http.StatusInternalServerError)
+			return
 		}
 
-		logs.AddWalEntry(appConfig.WAL, key, value, grpcNode)
+		destNode, ok := appConfig.NodeByID[grpcNode]
+		if !ok {
+			http.Error(w, fmt.Sprintf("node %q not found", grpcNode), http.StatusInternalServerError)
+			return
+		}
 
-		destinationNodeIndex := sort.Search(len(appConfig.Nodes), func(i int) bool { return appConfig.Nodes[i].ID == grpcNode }) % len(appConfig.Nodes)
-
-		grpcClient, connection := nodes.StartGRPCClient(appConfig.Nodes[destinationNodeIndex].Address)
-		defer connection.Close()
+		grpcClient, ok := appConfig.NodeClients[grpcNode]
+		if !ok {
+			http.Error(w, fmt.Sprintf("no gRPC client for node %q", grpcNode), http.StatusInternalServerError)
+			return
+		}
 
 		searchPayload := &nodes.NodeSearchRequest{
-			Node: appConfig.Nodes[destinationNodeIndex].Address,
+			Node: destNode.Address,
 			Key:  key,
 		}
 
-		response, error := grpcClient.SearchNode(context.Background(), searchPayload)
+		rpcCtx, cancel := context.WithTimeout(r.Context(), grpcRequestTimeout)
+		defer cancel()
 
-		if error != nil {
-			panic(error)
+		response, err := grpcClient.SearchNode(rpcCtx, searchPayload)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("gRPC search failed for node %q: %v", grpcNode, err), http.StatusGatewayTimeout)
+			return
 		}
 
 		w.WriteHeader(http.StatusOK)
-		err := json.NewEncoder(w).Encode(response)
+		err = json.NewEncoder(w).Encode(response)
 		if err != nil {
 			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 			return

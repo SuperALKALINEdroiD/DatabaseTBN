@@ -87,3 +87,26 @@ func GetManifest() (*Manifest, error) {
 func (manifest Manifest) validateManifest() bool {
 	return true
 }
+
+// SaveManifest writes the manifest to disk atomically (write-then-rename).
+func SaveManifest(m *Manifest) error {
+	appPath := common.GetAppPath()
+	manifestPath := filepath.Join(appPath, manifestFileName)
+	tmpPath := manifestPath + ".tmp"
+
+	data, err := json.Marshal(m)
+	if err != nil {
+		return fmt.Errorf("failed to marshal manifest: %w", err)
+	}
+
+	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write manifest tmp file: %w", err)
+	}
+
+	if err := os.Rename(tmpPath, manifestPath); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("failed to rename manifest tmp file: %w", err)
+	}
+
+	return nil
+}

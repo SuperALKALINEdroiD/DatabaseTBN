@@ -1,12 +1,11 @@
 package persistance
 
 import (
-	"bufio"
-	"encoding/gob"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"hash/fnv"
-	"io"
+	"log"
 	"math"
 	"os"
 )
@@ -62,6 +61,9 @@ func (bf *BloomFilter) MightContain(key string) bool {
 	return true
 }
 
+// Save writes the bloom filter as packed binary:
+// [uint32: M][uint32: K][uint32: byteLen][packed bits...]
+// Each bool occupies one bit; 8 bools per byte.
 func (bf *BloomFilter) Save(path string) error {
 	file, err := os.Create(path)
 	if err != nil {
@@ -69,13 +71,20 @@ func (bf *BloomFilter) Save(path string) error {
 	}
 	defer file.Close()
 
-	bufferedWriter := bufio.NewWriter(file)
-	defer bufferedWriter.Flush()
+	byteLen := uint32((bf.M + 7) / 8)
+	packed := make([]byte, byteLen)
+	for i, bit := range bf.Bitset {
+		if bit {
+			packed[i/8] |= 1 << (uint(i) % 8)
+		}
+	}
 
-	enc := gob.NewEncoder(bufferedWriter)
-	err = enc.Encode(bf)
-	if err != nil {
-		return err
+	header := [3]uint32{uint32(bf.M), uint32(bf.K), byteLen}
+	if err := binary.Write(file, binary.LittleEndian, header); err != nil {
+		return fmt.Errorf("failed to write bloom filter header: %w", err)
+	}
+	if _, err := file.Write(packed); err != nil {
+		return fmt.Errorf("failed to write bloom filter bitset: %w", err)
 	}
 
 	return nil
@@ -97,6 +106,9 @@ func (bf *BloomFilter) Validate() error {
 	return nil
 }
 
+// LoadBloomFilter reads a bloom filter written by Save.
+// On format errors (e.g. old gob-encoded files), logs a warning and returns nil
+// so the caller falls back to a full SSTable scan.
 func LoadBloomFilter(path string) (*BloomFilter, error) {
 	fileInfo, err := os.Stat(path)
 	if err != nil {
@@ -105,7 +117,6 @@ func LoadBloomFilter(path string) (*BloomFilter, error) {
 		}
 		return nil, err
 	}
-
 	if fileInfo.Size() == 0 {
 		return nil, nil
 	}
@@ -116,21 +127,34 @@ func LoadBloomFilter(path string) (*BloomFilter, error) {
 	}
 	defer file.Close()
 
-	bufferedReader := bufio.NewReader(file)
-	dec := gob.NewDecoder(bufferedReader)
-
-	var bf BloomFilter
-	err = dec.Decode(&bf)
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			return nil, nil
-		}
-		return nil, err
+	var header [3]uint32
+	if err := binary.Read(file, binary.LittleEndian, &header); err != nil {
+		log.Printf("Warning: bloom filter at %s has unrecognized format, skipping: %v", path, err)
+		return nil, nil
 	}
 
+	m, k, byteLen := int(header[0]), int(header[1]), int(header[2])
+	if m <= 0 || k <= 0 || byteLen != (m+7)/8 {
+		log.Printf("Warning: bloom filter at %s has invalid header (M=%d K=%d byteLen=%d), skipping", path, m, k, byteLen)
+		return nil, nil
+	}
+
+	packed := make([]byte, byteLen)
+	if _, err := file.Read(packed); err != nil {
+		log.Printf("Warning: failed to read bloom filter bitset at %s, skipping: %v", path, err)
+		return nil, nil
+	}
+
+	bitset := make([]bool, m)
+	for i := range bitset {
+		bitset[i] = packed[i/8]&(1<<(uint(i)%8)) != 0
+	}
+
+	bf := &BloomFilter{Bitset: bitset, K: k, M: m}
 	if err := bf.Validate(); err != nil {
-		return nil, err
+		log.Printf("Warning: bloom filter validation failed at %s: %v", path, err)
+		return nil, nil
 	}
 
-	return &bf, nil
+	return bf, nil
 }
