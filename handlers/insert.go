@@ -16,6 +16,9 @@ func InsertHandler(appConfig *core.App) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
+		ctx := r.Context()
+		fmt.Println(ctx.Value("requestID"), "CTX VALUEEEEE")
+
 		if appConfig.Config.MetaDataConfig.State != config.NodeStateReady {
 			http.Error(w, "Database is not in ready state", http.StatusTooEarly)
 			return
@@ -52,8 +55,6 @@ func InsertPair(ctx context.Context, appConfig *core.App, key string, value stri
 		return nil, fmt.Errorf("unable to locate node for key %q: %w", key, hashError)
 	}
 
-	logs.AddWalEntry(appConfig.WAL, key, value, grpcNodeID)
-
 	destNode, ok := appConfig.NodeByID[grpcNodeID]
 	if !ok {
 		return nil, fmt.Errorf("node %q not found", grpcNodeID)
@@ -62,6 +63,10 @@ func InsertPair(ctx context.Context, appConfig *core.App, key string, value stri
 	grpcClient, ok := appConfig.NodeClients[grpcNodeID]
 	if !ok {
 		return nil, fmt.Errorf("no gRPC client for node %q", grpcNodeID)
+	}
+
+	if err := logs.AddWalEntry(appConfig.WAL, key, value, grpcNodeID); err != nil {
+		return nil, err
 	}
 
 	insertionPayload := &nodes.NodeManipulationRequest{

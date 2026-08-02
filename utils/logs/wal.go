@@ -27,7 +27,11 @@ type WriteAheadEntry struct {
 	Status    EntryStatus
 }
 
-func AddWalEntry(wal storage.WAL, key string, value string, nodeId string) {
+func AddWalEntry(wal storage.WAL, key string, value string, nodeId string) error {
+	if wal == nil {
+		return fmt.Errorf("write-ahead log is not configured")
+	}
+
 	writeAheadEntry := WriteAheadEntry{
 		EntryID:   uuid.New().String(),
 		NodeID:    nodeId,
@@ -38,14 +42,15 @@ func AddWalEntry(wal storage.WAL, key string, value string, nodeId string) {
 
 	logData, err := json.Marshal(writeAheadEntry)
 	if err != nil {
-		panic("Failed to serialize the log entry")
+		return fmt.Errorf("failed to serialize WAL entry: %w", err)
 	}
 
 	if err := wal.WriteLog(logData); err != nil {
-		panic("Failed to write to write-ahead logs")
+		return fmt.Errorf("failed to write WAL entry: %w", err)
 	}
 
 	log.Printf("ADDED: %s :: %s to Write Ahead Logs", key, value)
+	return nil
 }
 
 func ParseWalEntry(walEntry string) (string, string, string, error) {

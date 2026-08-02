@@ -19,6 +19,7 @@ type internalNode struct {
 	memTable    redblacktree.Tree
 	dbConfig    config.DatabaseConfig
 	memTableMux sync.RWMutex
+	flushMux    sync.Mutex
 	nodeID      string
 	wal         storage.WAL
 }
@@ -27,14 +28,22 @@ func (server *internalNode) ManipulateNode(ctx context.Context, request *NodeMan
 	prefix := common.LogPrefix()
 	log.Printf("%s :: Incoming %s request on manipulation procedure at %s", prefix, request.Operation, request.Node)
 
-	server.memTableMux.Lock()
-	defer server.memTableMux.Unlock()
-
 	if request.Operation == Operation_CREATE {
-		if server.shouldFlushToMemory() {
-			defer server.flushMemTableToMemory()
-		}
+		var flushSnapshot *redblacktree.Tree
+
+		server.memTableMux.Lock()
 		server.memTable.Put(request.GetKey(), request.GetValue())
+		if server.shouldFlushToMemory() {
+			snapshot := server.memTable
+			flushSnapshot = &snapshot
+			server.memTable = *redblacktree.NewWithStringComparator()
+		}
+		server.memTableMux.Unlock()
+
+		if flushSnapshot != nil {
+			go server.flushMemTableToMemory(flushSnapshot)
+		}
+
 		log.Printf("Inserted using manipulation procedure at %s", request.Node)
 	}
 
@@ -50,7 +59,9 @@ func (server *internalNode) ManipulateNode(ctx context.Context, request *NodeMan
 
 func (server *internalNode) SearchNode(ctx context.Context, request *NodeSearchRequest) (*NodeResponse, error) {
 
+	server.memTableMux.RLock()
 	searhResult, found := server.memTable.Get(request.Key)
+	server.memTableMux.RUnlock()
 
 	if !found {
 		diskValue, diskFound, err := server.lookupFromDisk(request.Key)

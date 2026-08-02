@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/SuperALKALINEdroiD/timelyDB/config"
@@ -59,9 +60,10 @@ func initRoutes(mux *http.ServeMux, app *core.App) {
 }
 
 func middleware(h http.Handler, m ...func(http.Handler) http.Handler) http.Handler {
-	for i := len(m) - 1; i >= 0; i-- {
-		h = m[i](h)
+	for _, value := range slices.Backward(m) {
+		h = value(h)
 	}
+
 	return h
 }
 
@@ -80,7 +82,7 @@ func requestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.Header.Get("X-Request-ID")
 		if id == "" {
-			id = uuid.New().String()
+			id = uuid.NewString()
 		}
 		w.Header().Set("X-Request-ID", id)
 		ctx := context.WithValue(r.Context(), "requestID", id)

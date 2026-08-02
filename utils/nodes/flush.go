@@ -11,6 +11,7 @@ import (
 
 	"github.com/SuperALKALINEdroiD/timelyDB/manifest"
 	"github.com/SuperALKALINEdroiD/timelyDB/utils/persistance"
+	"github.com/emirpasic/gods/trees/redblacktree"
 )
 
 type kvPair struct {
@@ -18,27 +19,39 @@ type kvPair struct {
 	value string
 }
 
-func (server *internalNode) flushMemTableToMemory() {
+func (server *internalNode) flushMemTableToMemory(memTable *redblacktree.Tree) {
 	log.Println("Starting memory flush to persistent storage")
 	defer log.Println("Completed Memory write, Continuing normal operations")
 
-	keys := server.memTable.Keys()
+	keys := memTable.Keys()
 	kvData := make(map[any]any)
 
 	for _, key := range keys {
-		value, ok := server.memTable.Get(key)
+		value, ok := memTable.Get(key)
 		if ok {
 			kvData[key] = value
 		}
 	}
 
-	err := server.atomicFlushToDisk(kvData)
-	if err != nil {
+	server.flushMux.Lock()
+	defer server.flushMux.Unlock()
+
+	if err := server.atomicFlushToDisk(kvData); err != nil {
 		log.Printf("Error during flush: %v", err)
+		server.restoreMemTableSnapshot(kvData)
 		return
 	}
+}
 
-	server.memTable.Clear()
+func (server *internalNode) restoreMemTableSnapshot(kvData map[any]any) {
+	server.memTableMux.Lock()
+	defer server.memTableMux.Unlock()
+
+	for key, value := range kvData {
+		if _, found := server.memTable.Get(key); !found {
+			server.memTable.Put(key, value)
+		}
+	}
 }
 
 func (server *internalNode) atomicFlushToDisk(kvData map[any]any) error {
@@ -98,17 +111,9 @@ func (server *internalNode) atomicFlushToDisk(kvData map[any]any) error {
 		SegmentID: segID,
 	})
 
-	// Save WAL checkpoint: record line count so replay skips these entries on next startup
-	if server.wal != nil {
-		if err := server.wal.Flush(); err != nil {
-			log.Printf("Warning: WAL flush before checkpoint failed: %v", err)
-		} else if lineCount, err := server.wal.GetTotalLines(); err == nil {
-			if m.NodeCheckpoints == nil {
-				m.NodeCheckpoints = make(map[string]uint64)
-			}
-			m.NodeCheckpoints[server.nodeID] = uint64(lineCount)
-		}
-	}
+	// The WAL is appended before requests reach the node, so the global WAL line
+	// count can include writes that are not part of this snapshot yet. Advancing
+	// the checkpoint here could make replay skip unflushed entries.
 
 	if err := manifest.SaveManifest(m); err != nil {
 		log.Printf("Warning: failed to save manifest after flush: %v", err)
