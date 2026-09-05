@@ -15,8 +15,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-
-
 type Node struct {
 	ID      string
 	Address string
