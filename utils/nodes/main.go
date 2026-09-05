@@ -20,7 +20,7 @@ type Node struct {
 	Address string
 }
 
-func nodeSetupTask(ctx context.Context, nodeID string, port string, config *config.DatabaseConfig) (*Node, error) {
+func nodeSetupTask(ctx context.Context, nodeID string, port string, config *config.DatabaseConfig, wal storage.WAL) (*Node, error) {
 	listener, httpError := net.Listen("tcp", port)
 	if httpError != nil {
 		return nil, fmt.Errorf("failed to start listener: %v", httpError)
@@ -28,7 +28,7 @@ func nodeSetupTask(ctx context.Context, nodeID string, port string, config *conf
 
 	grpcServer := grpc.NewServer()
 	nodeStorage := storage.LocalKVStore{} // TODO: based on config
-	dataStoreServer := &internalNode{Storage: &nodeStorage, MemTable: *redblacktree.NewWithStringComparator()}
+	dataStoreServer := &internalNode{storage: &nodeStorage, memTable: *redblacktree.NewWithStringComparator(), dbConfig: *config, nodeID: nodeID, wal: wal}
 	RegisterNodeServiceServer(grpcServer, dataStoreServer)
 
 	stop := make(chan struct{})
@@ -52,7 +52,7 @@ func nodeSetupTask(ctx context.Context, nodeID string, port string, config *conf
 	return &Node{ID: nodeID, Address: port}, nil
 }
 
-func LoadServers(ctx context.Context, config *config.DatabaseConfig) ([]*Node, hashing.NodeHash) {
+func LoadServers(ctx context.Context, config *config.DatabaseConfig, wal storage.WAL) ([]*Node, hashing.NodeHash) {
 	if len(config.Nodes) == 0 || config.NodeCount == 0 {
 		log.Println("No node configuration found.")
 		return []*Node{}, nil
@@ -67,7 +67,7 @@ func LoadServers(ctx context.Context, config *config.DatabaseConfig) ([]*Node, h
 		log.Printf("Node %d: Endpoint ==> %s\n", i+1, node.Endpoint)
 
 		var setupError error
-		grpcNodes[i], setupError = nodeSetupTask(ctx, strconv.Itoa(i), node.Endpoint, config)
+		grpcNodes[i], setupError = nodeSetupTask(ctx, strconv.Itoa(i), node.Endpoint, config, wal)
 
 		if setupError != nil {
 			log.Printf("Error setting up Node %d: %v\n", i+1, setupError)
@@ -82,13 +82,12 @@ func LoadServers(ctx context.Context, config *config.DatabaseConfig) ([]*Node, h
 }
 
 func StartGRPCClient(destNodeAddr string) (NodeServiceClient, *grpc.ClientConn) {
-	formattedAddress := fmt.Sprintf("localhost%s", destNodeAddr)
-	conn, err := grpc.NewClient(formattedAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(destNodeAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	log.Println("gRPC client started for node running at", formattedAddress)
+	log.Println("gRPC client started for node running at", destNodeAddr)
 	client := NewNodeServiceClient(conn)
 
 	return client, conn

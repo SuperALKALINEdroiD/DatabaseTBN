@@ -19,6 +19,6 @@
 	 "inMemoryStorageThreshold": 2000,
 	 "metaDataConfig": {
 	 	 "state": 1,
-	 	 "walPath": "../runtime-files/wal-storage"
+	 	 "walPath": "wal-storage"
 	 }
 }

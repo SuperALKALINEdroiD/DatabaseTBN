@@ -16,6 +16,7 @@ This is a distributed, in-memory key-value store with write-ahead logging (WAL) 
 - [ ] **Persistent Disk Storage**: Working on storing data to disk efficiently.
 - [ ] **Additional Endpoints**: Implementing `GET`, `UPDATE`, `DELETE`, and other operations.
 - [ ] **GraphQL & Live Queries**: Exploring GraphQL or similar solutions for reactivity.
+- [ ] Implement red black tree by myself
 
 ## Future Plans
 - **Replication & Failover**: Implement strategies for high availability.
