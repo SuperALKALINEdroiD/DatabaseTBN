@@ -7,7 +7,7 @@ type Storage interface {
 
 type WAL interface {
 	Storage
-	WriteLog(data []byte) error // write WAL logs
+	WriteLog(data []byte) error // write, flush, and sync the entry before returning
 	ReadLog(lineNumber ...int) ([]string, error)
 	GetPath() string
 	GetTotalLines() (int, error)

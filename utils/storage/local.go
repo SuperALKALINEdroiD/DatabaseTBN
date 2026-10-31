@@ -6,16 +6,13 @@ import (
 	"log"
 	"os"
 	"sync"
-	"time"
 )
 
 type LocalWAL struct {
-	path    string
-	file    *os.File
-	writer  *bufio.Writer
-	done    chan struct{}
-	stopped chan struct{}
-	mutex   sync.Mutex
+	path   string
+	file   *os.File
+	writer *bufio.Writer
+	mutex  sync.Mutex
 }
 
 func (localWAL *LocalWAL) Connect(path string) error {
@@ -27,25 +24,6 @@ func (localWAL *LocalWAL) Connect(path string) error {
 	}
 	localWAL.file = file
 	localWAL.writer = bufio.NewWriterSize(file, 64*1024) // 64KB buffer
-	localWAL.done = make(chan struct{})
-	localWAL.stopped = make(chan struct{})
-
-	go func() {
-		defer close(localWAL.stopped)
-		ticker := time.NewTicker(200 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				localWAL.mutex.Lock()
-				_ = localWAL.writer.Flush()
-				_ = localWAL.file.Sync()
-				localWAL.mutex.Unlock()
-			case <-localWAL.done:
-				return
-			}
-		}
-	}()
 
 	return nil
 }
@@ -57,6 +35,9 @@ func (localWAL *LocalWAL) GetPath() string {
 func (localWAL *LocalWAL) WriteLog(data []byte) error {
 	localWAL.mutex.Lock()
 	defer localWAL.mutex.Unlock()
+	if localWAL.file == nil {
+		return os.ErrClosed
+	}
 
 	_, err := localWAL.writer.Write(append(data, '\n'))
 	if err != nil {
@@ -64,13 +45,19 @@ func (localWAL *LocalWAL) WriteLog(data []byte) error {
 		return err
 	}
 
-	return nil
+	return localWAL.flush()
 }
 
 func (localWAL *LocalWAL) Flush() error {
 	localWAL.mutex.Lock()
 	defer localWAL.mutex.Unlock()
+	if localWAL.file == nil {
+		return os.ErrClosed
+	}
+	return localWAL.flush()
+}
 
+func (localWAL *LocalWAL) flush() error {
 	if err := localWAL.writer.Flush(); err != nil {
 		return err
 	}
@@ -78,10 +65,14 @@ func (localWAL *LocalWAL) Flush() error {
 }
 
 func (localWAL *LocalWAL) Close() error {
-	close(localWAL.done)
-	<-localWAL.stopped
-	flushErr := localWAL.Flush()
+	localWAL.mutex.Lock()
+	defer localWAL.mutex.Unlock()
+	if localWAL.file == nil {
+		return os.ErrClosed
+	}
+	flushErr := localWAL.flush()
 	closeErr := localWAL.file.Close()
+	localWAL.file = nil
 	return errors.Join(flushErr, closeErr)
 }
 
