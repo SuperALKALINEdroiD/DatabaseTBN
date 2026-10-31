@@ -10,11 +10,12 @@ import (
 )
 
 type LocalWAL struct {
-	path   string
-	file   *os.File
-	writer *bufio.Writer
-	done   chan struct{}
-	mutex  sync.Mutex
+	path    string
+	file    *os.File
+	writer  *bufio.Writer
+	done    chan struct{}
+	stopped chan struct{}
+	mutex   sync.Mutex
 }
 
 func (localWAL *LocalWAL) Connect(path string) error {
@@ -27,8 +28,10 @@ func (localWAL *LocalWAL) Connect(path string) error {
 	localWAL.file = file
 	localWAL.writer = bufio.NewWriterSize(file, 64*1024) // 64KB buffer
 	localWAL.done = make(chan struct{})
+	localWAL.stopped = make(chan struct{})
 
 	go func() {
+		defer close(localWAL.stopped)
 		ticker := time.NewTicker(200 * time.Millisecond)
 		defer ticker.Stop()
 		for {
@@ -76,10 +79,10 @@ func (localWAL *LocalWAL) Flush() error {
 
 func (localWAL *LocalWAL) Close() error {
 	close(localWAL.done)
-	if err := localWAL.Flush(); err != nil {
-		return err
-	}
-	return localWAL.file.Close()
+	<-localWAL.stopped
+	flushErr := localWAL.Flush()
+	closeErr := localWAL.file.Close()
+	return errors.Join(flushErr, closeErr)
 }
 
 func (localWAL *LocalWAL) GetSize() (int, error) {
