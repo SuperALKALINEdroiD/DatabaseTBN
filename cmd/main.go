@@ -34,18 +34,24 @@ func run() (runErr error) {
 		return fmt.Errorf("failed to create profiler: %w", err)
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	signalCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	nodeCtx, stopNodes := context.WithCancel(context.Background())
 	var wal *storage.LocalWAL
 	var server *http.Server
+	var grpcNodes []*nodes.Node
 	nodeConns := make(map[string]*grpc.ClientConn)
 	defer func() {
 		stop()
 		if server != nil {
-			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			if err := server.Shutdown(shutdownCtx); err != nil {
+			if err := server.Shutdown(context.Background()); err != nil {
 				runErr = errors.Join(runErr, fmt.Errorf("server shutdown failed: %w", err))
 			}
-			shutdownCancel()
+		}
+		stopNodes()
+		for _, node := range grpcNodes {
+			if node != nil {
+				<-node.Done()
+			}
 		}
 		for nodeID, conn := range nodeConns {
 			if err := conn.Close(); err != nil {
@@ -81,7 +87,8 @@ func run() (runErr error) {
 	}
 	wal = connectedWAL
 
-	grpcNodes, nodeHashInfo := nodes.LoadServers(ctx, config, wal)
+	loadedNodes, nodeHashInfo := nodes.LoadServers(nodeCtx, config, wal)
+	grpcNodes = loadedNodes
 
 	storageNodesIndex := make(map[string]*nodes.Node, len(grpcNodes))
 	nodeClients := make(map[string]nodes.NodeServiceClient, len(grpcNodes))
@@ -133,7 +140,7 @@ func run() (runErr error) {
 	}()
 
 	select {
-	case <-ctx.Done():
+	case <-signalCtx.Done():
 		log.Println("Received shutdown signal. Stopping servers...")
 	case err := <-serverErrors:
 		return fmt.Errorf("server failed: %w", err)

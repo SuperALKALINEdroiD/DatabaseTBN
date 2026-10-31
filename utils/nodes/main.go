@@ -18,6 +18,11 @@ import (
 type Node struct {
 	ID      string
 	Address string
+	done    chan struct{}
+}
+
+func (node *Node) Done() <-chan struct{} {
+	return node.done
 }
 
 func nodeSetupTask(ctx context.Context, nodeID string, port string, config *config.DatabaseConfig, wal storage.WAL) (*Node, error) {
@@ -28,16 +33,26 @@ func nodeSetupTask(ctx context.Context, nodeID string, port string, config *conf
 
 	grpcServer := grpc.NewServer()
 	nodeStorage := storage.LocalKVStore{} // TODO: based on config
-	dataStoreServer := &internalNode{storage: &nodeStorage, memTable: *redblacktree.NewWithStringComparator(), dbConfig: *config, nodeID: nodeID, wal: wal}
+	flushQueue := make(chan *redblacktree.Tree, 1)
+	dataStoreServer := &internalNode{storage: &nodeStorage, memTable: *redblacktree.NewWithStringComparator(), dbConfig: *config, nodeID: nodeID, wal: wal, flushQueue: flushQueue}
 	RegisterNodeServiceServer(grpcServer, dataStoreServer)
 
-	stop := make(chan struct{})
+	done := make(chan struct{})
+	serveDone := make(chan struct{})
+	flushDone := make(chan struct{})
 
 	go func() {
+		defer close(flushDone)
+		for snapshot := range flushQueue {
+			dataStoreServer.flushMemTableToMemory(snapshot)
+		}
+	}()
+
+	go func() {
+		defer close(serveDone)
 		log.Printf("Node %s: gRPC server started", nodeID)
 		if err := grpcServer.Serve(listener); err != nil {
 			log.Printf("gRPC server error: %v", err)
-			close(stop)
 		}
 	}()
 
@@ -46,10 +61,13 @@ func nodeSetupTask(ctx context.Context, nodeID string, port string, config *conf
 		log.Printf("Shutting down gRPC server for Node %s...", nodeID)
 		grpcServer.GracefulStop()
 		listener.Close()
-		close(stop)
+		<-serveDone
+		close(flushQueue)
+		<-flushDone
+		close(done)
 	}()
 
-	return &Node{ID: nodeID, Address: port}, nil
+	return &Node{ID: nodeID, Address: port, done: done}, nil
 }
 
 func LoadServers(ctx context.Context, config *config.DatabaseConfig, wal storage.WAL) ([]*Node, hashing.NodeHash) {
