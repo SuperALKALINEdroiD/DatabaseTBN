@@ -20,6 +20,7 @@ type internalNode struct {
 	dbConfig    config.DatabaseConfig
 	memTableMux sync.RWMutex
 	flushMux    sync.Mutex
+	flushQueue  chan *redblacktree.Tree
 	nodeID      string
 	wal         storage.WAL
 }
@@ -41,7 +42,7 @@ func (server *internalNode) ManipulateNode(ctx context.Context, request *NodeMan
 		server.memTableMux.Unlock()
 
 		if flushSnapshot != nil {
-			go server.flushMemTableToMemory(flushSnapshot)
+			server.flushQueue <- flushSnapshot
 		}
 
 		log.Printf("Inserted using manipulation procedure at %s", request.Node)
